@@ -391,7 +391,7 @@ def drawsinglepolyline(l,vcount,f,layername): #l-polyline vcount-vertex count f-
         f.write('10\n{:.4f}\n20\n{:.4f}\n30\n0.0\n'.format(pos[0],pos[1]))             # write a point 
         #filetowrite.write('X{:07.3f}Y{:07.3f}\n'.format(pos[0],pos[1])) 
     vcount=vcount+1    
-    f.write("0\nSEQEND\n8\n"++layername+"\n5\n"+hex(vcount)[2:]+"\n")                             # finished writing a polyline
+    f.write("0\nSEQEND\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n")                             # finished writing a polyline
     return vcount
 
 def scanpolyline(poly):
