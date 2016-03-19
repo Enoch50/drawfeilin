@@ -2,6 +2,7 @@
 import os
 import sys
 import re
+import random
 #reading file 
 readfilelist=[]
 #writefilelist=[]
@@ -15,67 +16,102 @@ filelist= os.listdir(mypath)
 #图形数量以及阵列个数
 center_ratio=0.84
 ratio_num=7
+ratio_diff=0.01
 x_length=4.3
 y_length=4.8
 x_array_num=30
-y_array_num=30
+y_array_num=20
 xarray_length=15
 yarray_length=10
 x_extend_length=0.1
 y_extend_length=0.1
+cutline_x_offset=100
+cutline_y_offset=100
 name_of_feilin="caonima"
+justcopylist=["Mark","Outline"]
+extendcopylist=[]
 
-x_blank=(171.68-x_length*x_array_num)/2
-y_blank=(171.68-y_length*y_array_num)/2
+x_blank=(171.68-x_length/center_ratio*x_array_num)/2
+y_blank=(171.68-y_length/center_ratio*y_array_num)/2
 
 #切割线绘制相关                   
 
 Is_8inch=True
 Is_6inch=False
 
-def drawcutline(d):
-    """draw the cutline of feilin
+
+def defineTABLESECTION(f,layernamelist):
+    """define dxf table section
     """
-    feilin=file(name_of_feilin+'.dxf','w') 
-    feilin.write("0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n2\n") 
-    layernamelist=list(d.viewkeys())
-    layernamelist=[layernamelist[0]]               
-    polycount=0                      #为绘制的多段线计数
-    feilin_name_pos=[70.0,175.0]
-    ringlist=[[[-0.215,0.0],[0.215,0.0]],[[-0.215,171.68],[0.215,171.68]],[[-0.215,175.68],[0.215,175.68]],[[171.4650,0.0],[171.8950,0.0]],[[171.4650,171.68],[171.8950,171.68]]]
-    flashlist=buildflashlist()
-    cutlineset=buildcutlineset()
-                                    #图层名称与颜色号的对应字典
     
+    layercolordict={}
     for layername in layernamelist:
-        feilin.write("0\nLAYER\n2\n"+layername+"\n70\n0\n62\n"+str(2)+"\n6\nCONTINUOUS\n")
-    feilin.write("0\nENDTAB\n0\nENDSEC\n")            #绘制图层表     
+        t=random.randint(10,17)
+        layercolordict[layername]=random.randrange(10+t,250+t,10)
+        
+    layercolordict["Outline"]=1
+    layercolordict["Mark"]=5
+    layercolordict["Cutline"]=2
     
-    feilin.write("0\nSECTION\n2\nBLOCKS\n")            #绘制块定义
-    feilin.write("0\nBLOCK\n8\n0\n2\nROUND_1\n70\n0\n10\n0.0\n20\n0.0\n30\n0.0\n")
-    feilin.write("0\nPOLYLINE\n8\n0\n5\n"+""+"\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
-    feilin.write("40\n0.04\n41\n0.04")
-    feilin.write("\n0\nVERTEX\n5\n406\n8\n0\n10\n-0.02\n20\n0.0\n30\n0.0\n42\n1.0")
-    feilin.write("\n0\nVERTEX\n5\n407\n8\n0\n10\n0.02\n20\n0.0\n30\n0.0\n42\n1.0\n0\nSEQEND\n5\n408\n8\n0\n")
-    feilin.write("0\nENDBLK\n5\n43\n8\n0\n")  
-    feilin.write("0\nBLOCK\n8\n0\n2\n*U1\n")
+    f.write("0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n2\n") 
+    for layername in layernamelist:
+        f.write("0\nLAYER\n2\n"+layername+"\n70\n0\n62\n"+str(layercolordict[layername])+"\n6\nCONTINUOUS\n")
+    f.write("0\nENDTAB\n0\nENDSEC\n")   
+
+def defineBLOCKSECTION(f):
+    """define dxf BLOCK section
+    """
+    feilin_name_pos=[70.0,175.0]
+    f.write("0\nSECTION\n2\nBLOCKS\n")            #绘制块定义
+    f.write("0\nBLOCK\n8\n0\n2\nROUND_1\n70\n0\n10\n0.0\n20\n0.0\n30\n0.0\n")
+    f.write("0\nPOLYLINE\n8\n0\n5\n3F\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
+    f.write("40\n0.04\n41\n0.04")
+    f.write("\n0\nVERTEX\n5\n406\n8\n0\n10\n-0.02\n20\n0.0\n30\n0.0\n42\n1.0")
+    f.write("\n0\nVERTEX\n5\n407\n8\n0\n10\n0.02\n20\n0.0\n30\n0.0\n42\n1.0\n0\nSEQEND\n5\n408\n8\n0\n")
+    f.write("0\nENDBLK\n5\n43\n8\n0\n")  
+    f.write("0\nBLOCK\n8\n0\n2\n*U1\n")
                   
-    feilin.write("70\n1\n10\n0.0\n20\n0.0\n30\n0.0\n") 
-    feilin.write("0\nTEXT\n5\n46\n8\nCUTLINE\n6\nCONTINUOUS\n10\n"+str(feilin_name_pos[0])+"\n20\n"+str(feilin_name_pos[1])+"\n30\n0.0\n")
-    feilin.write("40\n2.5\n1\n"+name_of_feilin+"\n0\nENDBLK\n5\n47\n8\n0\n")
-    feilin.write("0\nENDSEC\n")
-    feilin.write("0\nSECTION\n2\nENTITIES\n")
+    f.write("70\n1\n10\n0.0\n20\n0.0\n30\n0.0\n") 
+    f.write("0\nTEXT\n5\n46\n8\nCUTLINE\n6\nCONTINUOUS\n10\n"+str(feilin_name_pos[0])+"\n20\n"+str(feilin_name_pos[1])+"\n30\n0.0\n")
+    f.write("40\n2.5\n1\n"+name_of_feilin+"\n0\nENDBLK\n5\n47\n8\n0\n")
+    f.write("0\nENDSEC\n")
+    
+def drawtext(vcount,f,layername):
+    """draw text in cutline
+    """
+    vcount=vcount+1
+    f.write("0\nINSERT\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n6\nCONTINUOUS\n")           
+    f.write("2\n*U1\n10\n0.0\n20\n0.0\n30\n0.0\n")
+    return vcount
+    
+
+def drawcutline(f,layernamelist,cutline_entities_count):
+    """draw the cutline of feilin
+    """ 
+      
+    #layernamelist=[layernamelist[0]]               
+
+    ringlist=[[[-0.215+cutline_x_offset,0.0+cutline_y_offset],[0.215+cutline_x_offset,0.0+cutline_y_offset]],
+              [[-0.215+cutline_x_offset,171.68+cutline_y_offset],[0.215+cutline_x_offset,171.68+cutline_y_offset]],
+              [[-0.215+cutline_x_offset,175.68+cutline_y_offset],[0.215+cutline_x_offset,175.68+cutline_y_offset]],
+              [[171.4650+cutline_x_offset,0.0+cutline_y_offset],[171.8950+cutline_x_offset,0.0+cutline_y_offset]],
+              [[171.4650+cutline_x_offset,171.68+cutline_y_offset],[171.8950+cutline_x_offset,171.68+cutline_y_offset]]]
+    flashlist=buildflashlist()
+    cutlineset=buildcutlineset()                                 
+    
+    f.write("0\nSECTION\n2\nENTITIES\n")
+    
     for layername in layernamelist:
         for polyline in cutlineset:
-            polycount=polycount+1
-            feilin.write("0\nPOLYLINE\n8\n"+layername+"\n5\n"+hex(polycount)[2:])         # begin writing a polyline
-            feilin.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n40\n0.08\n41\n0.08\n")
-            polycount=drawwidthpolyline(polyline, polycount, feilin,layername)
-        polycount=drawring(ringlist, polycount, feilin, layername)
-        polycount=drawflash(flashlist, polycount, feilin, layername)
+            cutline_entities_count=cutline_entities_count+1
+            f.write("0\nPOLYLINE\n8\n"+layername+"\n5\n"+hex(cutline_entities_count)[2:])         # begin writing a polyline
+            f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n40\n0.08\n41\n0.08\n")
+            cutline_entities_count=drawwidthpolyline(polyline, cutline_entities_count, f,layername)
+        cutline_entities_count=drawring(ringlist, cutline_entities_count, f, layername)
+        cutline_entities_count=drawflash(flashlist, cutline_entities_count, f, layername)
+        #cutline_entities_count=drawtext(cutline_entities_count, f, layername)
     
-    feilin.write("0\nENDSEC\n0\nEOF\n")                  # write the end of file
-    feilin.close()    
+    return cutline_entities_count
 
 def buildcutlineset():
     """build cutline polyline set
@@ -84,12 +120,18 @@ def buildcutlineset():
     cutlineset.extend([[[-3.2697,176.0104],[-4.3304,174.9497]],[[-3.2697,174.9497],[-4.3304,176.0104]]])
     cutlineset.extend([[[176.0104,176.0104],[174.9497,174.9497]],[[176.0104,174.9497],[174.9497,176.0104]]])
     cutlineset.extend([[[175.4800,-3.05],[175.4800,-4.55]],[[174.7300,-3.8],[176.2300,-3.8]]])
+    
+    for cutline in cutlineset:
+        for pos in cutline:
+            pos[0]=pos[0]+cutline_x_offset
+            pos[1]=pos[1]+cutline_y_offset
+    
     for row in range(0,x_array_num):
-        cutlineset.append([[x_blank+row*x_length,0.0],[x_blank+row*x_length,-3.0]])
-        cutlineset.append([[x_blank+row*x_length,171.68],[x_blank+row*x_length,174.68]])
+        cutlineset.append([[x_blank+row*(x_length/center_ratio)+cutline_x_offset,0.0+cutline_y_offset],[x_blank+row*(x_length/center_ratio)+cutline_x_offset,-3.0+cutline_y_offset]])
+        cutlineset.append([[x_blank+row*(x_length/center_ratio)+cutline_x_offset,171.68+cutline_y_offset],[x_blank+row*(x_length/center_ratio)+cutline_x_offset,174.68+cutline_y_offset]])
     for line in range(0,y_array_num):
-        cutlineset.append([[0.0,y_blank+line*y_length],[-3.0,y_blank+line*y_length]])
-        cutlineset.append([[171.68,y_blank+line*y_length],[174.68,y_blank+line*y_length]])
+        cutlineset.append([[0.0+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset],[-3.0+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset]])
+        cutlineset.append([[171.68+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset],[174.68+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset]])
     return cutlineset
 
 def buildflashlist():
@@ -101,16 +143,20 @@ def buildflashlist():
     flashlist.extend([[176.0104,176.0104],[174.9497,174.9497],[176.0104,174.9497],[174.9497,176.0104]])
     flashlist.extend([[175.4800,-3.05],[175.4800,-4.55],[174.7300,-3.8],[176.2300,-3.8]])
     
+    for flash in flashlist:
+        flash[0]=flash[0]+cutline_x_offset
+        flash[1]=flash[1]+cutline_y_offset
+    
     for row in range(0,x_array_num):
-        flashlist.append([x_blank+row*x_length,0.0])
-        flashlist.append([x_blank+row*x_length,-3.0])
-        flashlist.append([x_blank+row*x_length,171.68])
-        flashlist.append([x_blank+row*x_length,174.68])
+        flashlist.append([x_blank+row*(x_length/center_ratio)+cutline_x_offset,0.0+cutline_y_offset])
+        flashlist.append([x_blank+row*(x_length/center_ratio)+cutline_x_offset,-3.0+cutline_y_offset])
+        flashlist.append([x_blank+row*(x_length/center_ratio)+cutline_x_offset,171.68+cutline_y_offset])
+        flashlist.append([x_blank+row*(x_length/center_ratio)+cutline_x_offset,174.68+cutline_y_offset])
     for line in range(0,y_array_num):
-        flashlist.append([0.0,y_blank+line*y_length])
-        flashlist.append([-3.0,y_blank+line*y_length])
-        flashlist.append([171.68,y_blank+line*y_length])
-        flashlist.append([174.68,y_blank+line*y_length])
+        flashlist.append([0.0+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset])
+        flashlist.append([-3.0+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset])
+        flashlist.append([171.68+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset])
+        flashlist.append([174.68+cutline_x_offset,y_blank+line*(y_length/center_ratio)+cutline_y_offset])
     return flashlist
     
 def drawring(s,vcount,f,layername):#s-ringset vcount-vertex count f-file layername-name of layer 
@@ -250,10 +296,197 @@ def outputarraydataset(d):
                     
     feilin.write("0\nENDSEC\n0\nEOF\n")                   # write the end of file
     feilin.close()    
+    
+    
+def polylinedictarraycopy(d):
+    """input a polyline dict and array them 
+    """  
+    dictlist=[]
+    ratiolist=[]
+    rationumaccumulationlist=[]
+    
+    eachrationum=x_array_num//ratio_num
+    leftrationum=x_array_num%ratio_num
+    
+    eachrationumlist=[eachrationum]*ratio_num
+    
+    for i in range((ratio_num-1)//2-(leftrationum-1)//2,(ratio_num-1)//2-(leftrationum-1)//2+leftrationum):
+        eachrationumlist[i]=eachrationumlist[i]+1
+        
+    rationumaccumulationlist.append(0) 
+    
+    for i in range(1,ratio_num):
+        rationumaccumulationlist.append(rationumaccumulationlist[i-1]+eachrationumlist[i-1])
+    
+    for i in range(0,ratio_num):
+        ratiolist.append((center_ratio-((ratio_num+1)//2-1)*ratio_diff)+i*ratio_diff)    
+    
+    Ditemlist=d.items()
+    
+    for i in range(0,ratio_num):       
+        for j in range(0,eachrationumlist[i]): 
+            newdict=[]
+            for e in Ditemlist:                      
+                newdict.append([e[0],polylinedatasetarraycopy(e[1],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e[0],len(dictlist))])
+            dictlist.append(newdict)  
+    return dictlist
+  
+def polylinedatasetarraycopy(l,ratio,x_offset,y_offset,layername,arraycount):
+    """copy a polyline dataset and enlarged by a certain ratio
+    """ 
+    if layername in justcopylist:
+        dataset=datasetjustcopy(l,x_offset,y_offset)
+    elif layername in extendcopylist:
+        dataset=datasetratiocopy_extend(l,ratio,x_offset,y_offset)
+    else:
+        if arraycount==0:
+            dataset=datasetratiocopy_xl_extend(l,ratio,x_offset,y_offset)
+        elif arraycount==x_array_num-1:
+            dataset=datasetratiocopy_xr_extend(l,ratio,x_offset,y_offset)
+        else:
+            dataset=datasetratiocopy_notextend(l,ratio,x_offset,y_offset)
+    return dataset
+  
+def datasetjustcopy(l,x_offset,y_offset):
+    """just enlarged by center ratio
+    """
+    dataset=[]
+    for polyline in l:
+        newpolyline=[]
+        for pos in polyline:
+            newpolyline.append([pos[0]/center_ratio+x_offset,pos[1]/center_ratio+y_offset])
+        dataset.append(newpolyline)
+    return dataset
 
-def outputfeilindataset(d):
+def datasetratiocopy_xl_extend(l,ratio,x_offset,y_offset):
+    """just enlarged a dataset by certain ratio with vertex on outline extended
+    """
+    dataset=[]
+    for polyline in l:
+        newpolyline=[]
+        for pos in polyline:
+            pos_x=pos[0]
+            pos_y=pos[1]
+            if abs((abs(pos_x)-x_length/2))<0.01:
+                if pos_x<0:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
+                    pos_x=pos[0]/center_ratio+(abs(pos_x)/pos_x*x_extend_length)+x_offset
+                else:
+                    pos_x=pos[0]/center_ratio+x_offset                 
+            else:
+                pos_x=pos[0]/ratio+x_offset
+            if abs((abs(pos_y)-y_length/2))<0.01:
+                pos_y=pos[1]/center_ratio+(abs(pos_y)/pos_y*y_extend_length)+y_offset
+            else:
+                pos_y=pos[1]/ratio+y_offset                              
+            newpolyline.append([pos_x,pos_y])
+        dataset.append(newpolyline)
+    return dataset
+
+def datasetratiocopy_xr_extend(l,ratio,x_offset,y_offset):
+    """just enlarged a dataset by certain ratio with vertex on outline extended
+    """
+    dataset=[]
+    for polyline in l:
+        newpolyline=[]
+        for pos in polyline:
+            pos_x=pos[0]
+            pos_y=pos[1]
+            if abs((abs(pos_x)-x_length/2))<0.01: 
+                if pos_x>0:                                         #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
+                    pos_x=pos[0]/center_ratio+(abs(pos_x)/pos_x*x_extend_length)+x_offset
+                else:
+                    pos_x=pos[0]/center_ratio+x_offset               
+            else:
+                pos_x=pos[0]/ratio+x_offset
+            if abs((abs(pos_y)-y_length/2))<0.01:
+                pos_y=pos[1]/center_ratio+(abs(pos_y)/pos_y*y_extend_length)+y_offset
+            else:
+                pos_y=pos[1]/ratio+y_offset                              
+            newpolyline.append([pos_x,pos_y])
+        dataset.append(newpolyline)
+    return dataset
+
+def datasetratiocopy_extend(l,ratio,x_offset,y_offset):
+    """just enlarged a dataset by certain ratio with vertex on outline extended
+    """
+    dataset=[]
+    for polyline in l:
+        newpolyline=[]
+        for pos in polyline:
+            pos_x=pos[0]
+            pos_y=pos[1]
+            if abs((abs(pos_x)-x_length/2))<0.01:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
+                pos_x=pos[0]/center_ratio+(abs(pos_x)/pos_x*x_extend_length)+x_offset               
+            else:
+                pos_x=pos[0]/ratio+x_offset
+            if abs((abs(pos_y)-y_length/2))<0.01:
+                pos_y=pos[1]/center_ratio+(abs(pos_y)/pos_y*y_extend_length)+y_offset
+            else:
+                pos_y=pos[1]/ratio+y_offset                              
+            newpolyline.append([pos_x,pos_y])
+        dataset.append(newpolyline)
+    return dataset
+   
+
+def datasetratiocopy_notextend(l,ratio,x_offset,y_offset):
+    """just enlarged a dataset by certain ratio with vertex on outline not extended
+    """
+    dataset=[]
+    for polyline in l:
+        newpolyline=[]
+        for pos in polyline:
+            pos_x=pos[0]
+            pos_y=pos[1]
+            if abs((abs(pos_x)-x_length/2))<0.01:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
+                pos_x=pos[0]/center_ratio+x_offset               
+            else:
+                pos_x=pos[0]/ratio+x_offset
+            if abs((abs(pos_y)-y_length/2))<0.01:
+                pos_y=pos[1]/center_ratio+y_offset+(abs(pos_y)/pos_y*y_extend_length)
+            else:
+                pos_y=pos[1]/ratio+y_offset                              
+            newpolyline.append([pos_x,pos_y])
+        dataset.append(newpolyline)
+    
+    
+    return dataset
+    
+    
+
+def drawpolylinedict(d,f,vcount):
+    """draw polyline dict
+    """  
+    
+    for e in d:
+        for polyline in e[1]:
+            vcount=vcount+1
+            f.write("0\nPOLYLINE\n8\n"+e[0]+"\n5\n"+hex(vcount)[2:])
+            f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
+            vcount=drawsinglepolyline(polyline, vcount, f,e[0])
+    return vcount
+
+def drawfeilin(polylinedatasetdictlist,origindict):
     """accept polyline dataset and output them by dxf R12 format to feilin 
-    return none """    
+    return none """  
+    feilin=file(name_of_feilin+'.dxf','w') 
+    layernamelist=list(origindict.viewkeys())
+    layernamelist.append("Cutline")                        
+    entitiescount=0                                 #为绘制的实体对象计数
+    defineTABLESECTION(feilin, layernamelist)
+    defineBLOCKSECTION(feilin)
+    entitiescount=drawcutline(feilin,layernamelist,entitiescount)
+    
+    dictlist=polylinedictarraycopy(origindict)
+    
+    for d in dictlist:
+        entitiescount=drawpolylinedict(d,feilin,entitiescount)
+    
+    feilin.write("0\nENDSEC\n0\nEOF\n")                  # write the end of file
+    feilin.close() 
+    #for d in polylinedatasetdictlist:
+        
+    
+      
     
 def Arraydataset(offset_x,n,l):   #offset_x=distance between neighbouring dataset polyline n=how much ratio l=polyline dataset
     """accept polyline dataset and enlarged them by n times with certain ratio,move them with an offset
@@ -417,17 +650,8 @@ if __name__=='__main__':
     polylinedatasetdict=extractpolylinefromdxf()        
     #outputarraydataset(polylinedatasetdict)
     #outputfeilindataset(polylinedatasetdict)
-    drawcutline(polylinedatasetdict)
+       
+    dictlist=polylinedictarraycopy(polylinedatasetdict)
+    drawfeilin(dictlist,polylinedatasetdict)
 
-            
-    
-    #readme.write('X{:.0f}Y{:.0f}\n'.format(pos[0],pos[1]))     
-    #dataset.sort()
-    #readme.write(' has {:d} lines\n'.format(len(dataset)))
-    
-    # for pos in dataset:
-        # filetowrite.write('X{:.0f}Y{:.0f}\n'.format(pos[0],pos[1])) 
-    # filetoread.close()
-    # filetowrite.close()    
-    
-    
+ 

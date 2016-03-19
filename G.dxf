@@ -457,19 +457,19 @@ $TDUCREATE
   9
 $TDUPDATE
  40
-2457457.968690544
+2457467.861457188
   9
 $TDUUPDATE
  40
-2457457.635357211
+2457467.528123854
   9
 $TDINDWG
  40
-0.0000729861
+0.0001685532
   9
 $TDUSRTIMER
  40
-0.0000729861
+0.0001684606
   9
 $USRTIMER
  70
@@ -509,7 +509,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-75
+7B
   9
 $SURFTAB1
  70
@@ -893,7 +893,7 @@ $FINGERPRINTGUID
   9
 $VERSIONGUID
   2
-{2770700A-BCAF-4E9D-8AB4-D7BFBAB5D450}
+{7C143BA1-2A29-4218-9F23-EB7137624FE2}
   9
 $EXTNAMES
 290
@@ -1077,7 +1077,7 @@ AcDbViewportTableRecord
  21
 1.0
  12
-3.172268908556931
+3.172268908556934
  22
 0.7436974898387528
  13
@@ -1728,40 +1728,6 @@ AcDbPolyline
 1.85
  20
 -0.3
-  0
-LWPOLYLINE
-  5
-61
-330
-36
-100
-AcDbEntity
-  8
-G
-100
-AcDbPolyline
- 90
-        4
- 70
-     1
- 43
-0.0
- 10
-2.149999999999999
- 20
--2.399999999999999
- 10
--2.149999999999999
- 20
--2.399999999999999
- 10
--2.149999999999999
- 20
-2.399999999999999
- 10
-2.149999999999999
- 20
-2.399999999999999
   0
 ENDSEC
   0
@@ -2473,7 +2439,7 @@ TABLESTYLE
 102
 {ACAD_XDICTIONARY
 360
-73
+79
 102
 }
 102
@@ -2734,6 +2700,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -2820,6 +2790,10 @@ AcDbVisualStyle
 0.0
 1001
 ACAD
+1000
+AcDbSavedByObjectVersion
+1070
+     0
 1000
 AcDbSavedByObjectVersion
 1070
@@ -2914,6 +2888,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3004,6 +2982,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3090,6 +3072,10 @@ Brighten
 0.0
 1001
 ACAD
+1000
+AcDbSavedByObjectVersion
+1070
+     0
 1000
 AcDbSavedByObjectVersion
 1070
@@ -3186,6 +3172,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3272,6 +3262,10 @@ Conceptual
 0.0
 1001
 ACAD
+1000
+AcDbSavedByObjectVersion
+1070
+     0
 1000
 AcDbSavedByObjectVersion
 1070
@@ -3366,6 +3360,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3452,6 +3450,10 @@ Facepattern
 0.0
 1001
 ACAD
+1000
+AcDbSavedByObjectVersion
+1070
+     0
 1000
 AcDbSavedByObjectVersion
 1070
@@ -3546,6 +3548,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3632,6 +3638,10 @@ FlatWithEdges
 0.0
 1001
 ACAD
+1000
+AcDbSavedByObjectVersion
+1070
+     0
 1000
 AcDbSavedByObjectVersion
 1070
@@ -3726,6 +3736,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3816,6 +3830,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -3902,6 +3920,10 @@ Linepattern
 0.0
 1001
 ACAD
+1000
+AcDbSavedByObjectVersion
+1070
+     0
 1000
 AcDbSavedByObjectVersion
 1070
@@ -3998,6 +4020,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 VISUALSTYLE
   5
@@ -4088,6 +4114,10 @@ ACAD
 AcDbSavedByObjectVersion
 1070
      0
+1000
+AcDbSavedByObjectVersion
+1070
+     0
   0
 DICTIONARYVAR
   5
@@ -4157,7 +4187,7 @@ ACAD_XREC_ROUNDTRIP
   0
 DICTIONARY
   5
-73
+79
 330
 31
 100
@@ -4169,7 +4199,7 @@ AcDbDictionary
   3
 ACAD_XREC_ROUNDTRIP
 360
-74
+7A
   0
 XRECORD
   5
@@ -4299,15 +4329,15 @@ MATERIAL
   0
 XRECORD
   5
-74
+7A
 102
 {ACAD_REACTORS
 330
-73
+79
 102
 }
 330
-73
+79
 100
 AcDbXrecord
 280
