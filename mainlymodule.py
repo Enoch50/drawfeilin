@@ -28,12 +28,14 @@ x_extend_length=0.1
 y_extend_length=0.1
 cutline_x_offset=100
 cutline_y_offset=100
+ringdistance=171.68
 name_of_feilin="SLFB44-100"
 justcopylist=["Mark","Outline"]
 extendcopylist=[]
 
-x_blank=(171.68-x_length/center_ratio*x_array_num)/2
-y_blank=(171.68-y_length/center_ratio*y_array_num)/2
+
+x_blank=(ringdistance-x_length/center_ratio*x_array_num)/2
+y_blank=(ringdistance-y_length/center_ratio*y_array_num)/2
 
 #切割线绘制相关                   
 
@@ -357,19 +359,22 @@ def polylinedictarraycopy(d):
     return (dictlist,ratiolist,eachrationumlist)
 
 
-def holepolylinedatasetarraycopy(d):
+def holepolylinedictarraycopy(holepolylinedict):
     """input a hole polyline dataset dict and array them by line
     """
-    
-    
-    
-    return d
+    holepolylinearraydict={}
+    for e in holepolylinedict:
+        holepolylinedataset=[]
+        for row in range(0,y_array_num):           
+            holepolylinedataset.extend(datasetjustcopy(holepolylinedict[e], 1, 0, y_length/center_ratio*row))
+        holepolylinearraydict[e]=holepolylinedataset
+    return holepolylinearraydict
   
 def polylinedatasetarraycopy(l,ratio,x_offset,y_offset,layername,arraycount):
     """copy a polyline dataset and enlarged by a certain ratio
     """ 
     if layername in justcopylist:
-        dataset=datasetjustcopy(l,x_offset,y_offset)
+        dataset=datasetjustcopy(l,center_ratio,x_offset,y_offset)
     elif layername in extendcopylist:
         dataset=datasetratiocopy_extend(l,ratio,x_offset,y_offset)
     else:
@@ -381,14 +386,14 @@ def polylinedatasetarraycopy(l,ratio,x_offset,y_offset,layername,arraycount):
             dataset=datasetratiocopy_notextend(l,ratio,x_offset,y_offset)
     return dataset
   
-def datasetjustcopy(l,x_offset,y_offset):
+def datasetjustcopy(l,ratio,x_offset,y_offset):
     """just enlarged by center ratio
     """
     dataset=[]
     for polyline in l:
         newpolyline=[]
         for pos in polyline:
-            newpolyline.append([pos[0]/center_ratio+x_offset,pos[1]/center_ratio+y_offset])
+            newpolyline.append([pos[0]/ratio+x_offset,pos[1]/ratio+y_offset])
         dataset.append(newpolyline)
     return dataset
 
@@ -509,7 +514,7 @@ def drawfeilin(polylinedatasetdictlist,origindict):
     feilin_list=[]
     
     for layername in layernamelist:
-        if layername[0]!="V" and layername[0]!="v":
+        if layername[0]!='V' and layername[0]!='v':
             feilin_list.append(layername)
                             
     entitiescount=0                                 #为绘制的实体对象计数
@@ -529,28 +534,62 @@ def outputholepos(dictlist,origindict):
     """read the dict list of arrayed polyline dataset,extrated V hole and array them.and then calculate the hole position
     """
     
-    vholelayernamelist=list(origindict.viewkeys())
+    layernamelist=list(origindict.viewkeys())
     
     hole_list=[]
     holepolylinedict={}
     
-    for layername in vholelayernamelist:
-        if layername[0]=="V" or layername[0]=="v":
+    for layername in layernamelist:
+        if layername[0]=='V' or layername[0]=='v':
             hole_list.append(layername)
             
     for holelayer in hole_list: 
         holepolylinelist=[]       
         for d in dictlist:              
-            holepolylinelist.append(d[holelayer])
+            holepolylinelist.extend(d[holelayer])
         holepolylinedict[holelayer]=holepolylinelist
     
-    holepolylinedict=holepolylinedatasetarraycopy(holepolylinedict)
+    holepolylinearraydict=holepolylinedictarraycopy(holepolylinedict)
     
-    feilin=file(name_of_feilin+u'(总菲林)'+'.dxf','w') 
+    
+    holenotefile=file(u'通孔模式说明'+'.txt','w')
+    holenotefile.write("各通孔文件通孔数一览表(不包括5H):\n")
+    for e in holepolylinearraydict:
+        holeposfile=file(e+'.txt','w')
+        centerposlist=calculatecenterpos(holepolylinearraydict[e])
+        centerposlist.sort()
+        holenotefile.write("通孔层    "+e+"    一共有通孔    "+'{:d}'.format(len(centerposlist))+"    个\n")
+        for pos in centerposlist:
+            holeposfile.write('X{:.0f}Y{:.0f}\n'.format(pos[0]*1000,pos[1]*1000))     
+        holeposfile.close() 
+    
+def calculatecenterpos(holepolylinelist):
+    """input a hole polyline list and calculate the center position of them,offset by the center of the cutline.
+    """
+    center_pos_list=[]
+    for poly in holepolylinelist:
+        center_pos_x=0
+        center_pos_y=0
+        for pos in poly:
+            center_pos_x=center_pos_x+pos[0]
+            center_pos_y=center_pos_y+pos[1]
+        center_pos_x=center_pos_x/len(poly)-(cutline_x_offset+ringdistance/2)
+        center_pos_y=center_pos_y/len(poly)-(cutline_y_offset+ringdistance/2)
+        center_pos_list.append([center_pos_x,center_pos_y])
+    return center_pos_list
         
-def outputinfo(ratiolist,eachrationumlist):
+def outputinfo(d,ratiolist,eachrationumlist):
     """output feilin information
     """
+    hole_list=[]
+    feilin_list=[]
+    layernamelist=list(d.viewkeys())
+    for layername in layernamelist:
+        if layername[0]=='V' or layername[0]=='v':
+            hole_list.append(layername)
+        else:
+            feilin_list.append(layername)
+    
     info=file(u'菲林说明文件'+'.txt','w')
     info.write(name_of_feilin+"丝网设计转化报告\n")
     info.write("转化时间:    "+time.strftime('%Y-%m-%d %A %X',time.localtime(time.time()))+"\n")
@@ -570,6 +609,11 @@ def outputinfo(ratiolist,eachrationumlist):
     info.write("菲林切割线长度检验标准\n")
     info.write("X方向切割线总长度:    "+'{:.4f}'.format(round(x_length/center_ratio*x_array_num,4))+"mm\n")
     info.write("Y方向切割线总长度:    "+'{:.4f}'.format(round(y_length/center_ratio*y_array_num,4))+"mm\n")
+    #info.write("说明:通孔的图层为"+str(hole_list)+"\n")
+    info.write("\n\n菲林设计人:"+author_name+"\n")
+    info.write("菲林设计时间:"+time.strftime('%Y-%m-%d %X',time.localtime(time.time()))+"\n")
+    info.write("说明:需要制作菲林的图层为"+str(feilin_list)+"\n")
+    info.write("阵列方式:请将以上图层图案向上阵列"+str(y_array_num)+"行，行偏移为"+'{:.4f}'.format(round(y_length/center_ratio,4))+"mm\n")
     info.close()    
       
     
@@ -737,6 +781,6 @@ if __name__=='__main__':
     #outputfeilindataset(polylinedatasetdict)  
     (dictlist,ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict)
     drawfeilin(dictlist,polylinedatasetdict)
-    #outputholepos(dictlist,polylinedatasetdict)
-    outputinfo(ratiolist,eachrationumlist)
+    outputholepos(dictlist,polylinedatasetdict)
+    outputinfo(polylinedatasetdict,ratiolist,eachrationumlist)
  
