@@ -587,7 +587,7 @@ def outputinfo(d,ratiolist,eachrationumlist):
     for layername in layernamelist:
         if layername[0]=='V' or layername[0]=='v':
             hole_list.append(layername)
-        else:
+        elif layername!="Outline":
             feilin_list.append(layername)
     
     info=file(u'菲林说明文件'+'.txt','w')
@@ -612,8 +612,10 @@ def outputinfo(d,ratiolist,eachrationumlist):
     #info.write("说明:通孔的图层为"+str(hole_list)+"\n")
     info.write("\n\n菲林设计人:"+author_name+"\n")
     info.write("菲林设计时间:"+time.strftime('%Y-%m-%d %X',time.localtime(time.time()))+"\n")
-    info.write("说明:需要制作菲林的图层为"+str(feilin_list)+"\n")
-    info.write("阵列方式:请将以上图层图案向上阵列"+str(y_array_num)+"行，行偏移为"+'{:.4f}'.format(round(y_length/center_ratio,4))+"mm\n")
+    info.write("说明:需要制作菲林的图层为")
+    for feilin in feilin_list:
+        info.write(feilin+" ")
+    info.write("\n阵列方式:请将以上图层图案向上阵列"+str(y_array_num)+"行，行偏移为"+'{:.4f}'.format(round(y_length/center_ratio,4))+"mm\n")
     info.close()    
       
     
