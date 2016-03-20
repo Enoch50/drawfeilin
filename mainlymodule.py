@@ -325,7 +325,7 @@ def extractpolylinefromdxf():
     
     
 def polylinedictarraycopy(d):
-    """input a polyline dict and array them 
+    """input a polyline dict and array them by row
     """  
     dictlist=[]
     ratiolist=[]
@@ -346,16 +346,24 @@ def polylinedictarraycopy(d):
     
     for i in range(0,ratio_num):
         ratiolist.append((center_ratio-((ratio_num+1)//2-1)*ratio_diff)+i*ratio_diff)    
-    
-    Ditemlist=d.items()
-    
+       
     for i in range(0,ratio_num):       
         for j in range(0,eachrationumlist[i]): 
-            newdict=[]
-            for e in Ditemlist:                      
-                newdict.append([e[0],polylinedatasetarraycopy(e[1],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e[0],len(dictlist))])
+            newdict={}
+            for e in d: 
+                newdict[e]=polylinedatasetarraycopy(d[e],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e,len(dictlist))                     
+                #newdict.append([e,polylinedatasetarraycopy(d[e],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e,len(dictlist))])
             dictlist.append(newdict)  
     return (dictlist,ratiolist,eachrationumlist)
+
+
+def holepolylinedatasetarraycopy(d):
+    """input a hole polyline dataset dict and array them by line
+    """
+    
+    
+    
+    return d
   
 def polylinedatasetarraycopy(l,ratio,x_offset,y_offset,layername,arraycount):
     """copy a polyline dataset and enlarged by a certain ratio
@@ -484,11 +492,11 @@ def drawpolylinedict(d,f,vcount):
     """  
     
     for e in d:
-        for polyline in e[1]:
+        for polyline in d[e]:
             vcount=vcount+1
-            f.write("0\nPOLYLINE\n8\n"+e[0]+"\n5\n"+hex(vcount)[2:])
+            f.write("0\nPOLYLINE\n8\n"+e+"\n5\n"+hex(vcount)[2:])
             f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
-            vcount=drawsinglepolyline(polyline, vcount, f,e[0])
+            vcount=drawsinglepolyline(polyline, vcount, f,e)
     return vcount
 
 def drawfeilin(polylinedatasetdictlist,origindict):
@@ -516,6 +524,29 @@ def drawfeilin(polylinedatasetdictlist,origindict):
     feilin.write("0\nENDSEC\n0\nEOF\n")                  # write the end of file
     feilin.close() 
     #for d in polylinedatasetdictlist:
+    
+def outputholepos(dictlist,origindict):
+    """read the dict list of arrayed polyline dataset,extrated V hole and array them.and then calculate the hole position
+    """
+    
+    vholelayernamelist=list(origindict.viewkeys())
+    
+    hole_list=[]
+    holepolylinedict={}
+    
+    for layername in vholelayernamelist:
+        if layername[0]=="V" or layername[0]=="v":
+            hole_list.append(layername)
+            
+    for holelayer in hole_list: 
+        holepolylinelist=[]       
+        for d in dictlist:              
+            holepolylinelist.append(d[holelayer])
+        holepolylinedict[holelayer]=holepolylinelist
+    
+    holepolylinedict=holepolylinedatasetarraycopy(holepolylinedict)
+    
+    feilin=file(name_of_feilin+u'(总菲林)'+'.dxf','w') 
         
 def outputinfo(ratiolist,eachrationumlist):
     """output feilin information
@@ -703,9 +734,9 @@ if __name__=='__main__':
     buildfilelist()
     polylinedatasetdict=extractpolylinefromdxf()        
     #outputarraydataset(polylinedatasetdict)
-    #outputfeilindataset(polylinedatasetdict)
-       
+    #outputfeilindataset(polylinedatasetdict)  
     (dictlist,ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict)
     drawfeilin(dictlist,polylinedatasetdict)
+    #outputholepos(dictlist,polylinedatasetdict)
     outputinfo(ratiolist,eachrationumlist)
  
