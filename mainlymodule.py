@@ -28,12 +28,14 @@ x_extend_length=0.1
 y_extend_length=0.1
 cutline_x_offset=100
 cutline_y_offset=100
+ringdistance=171.68
 name_of_feilin="SLFB44-100"
 justcopylist=["Mark","Outline"]
 extendcopylist=[]
 
-x_blank=(171.68-x_length/center_ratio*x_array_num)/2
-y_blank=(171.68-y_length/center_ratio*y_array_num)/2
+
+x_blank=(ringdistance-x_length/center_ratio*x_array_num)/2
+y_blank=(ringdistance-y_length/center_ratio*y_array_num)/2
 
 #切割线绘制相关                   
 
@@ -236,7 +238,7 @@ def extractpolylinefromdxf():
     """
     d={}
     for readfile in readfilelist:                    #将readfilelist中的文件逐个按照程序进行读取分析
-        filetoread=file(readfile,'r')
+        filetoread=open(readfile,'r')
         layername=filetoread.name.split(".")[0]
         #newfilename=filetoread.name.split('.')[0]+'.txt'
         #readme.write(newfilename)
@@ -324,67 +326,78 @@ def extractpolylinefromdxf():
 #     feilin.close()    
     
     
-def polylinedictarraycopy(d):
-    """input a polyline dict and array them 
+def polylinedictarraycopy(d):#d——原始图层多段线字典
+    """input a polyline dict and array them by row
     """  
     dictlist=[]
-    ratiolist=[]
-    rationumaccumulationlist=[]
+    ratiolist=[]                  #放缩率列表
+    rationumaccumulationlist=[]          #放缩率数量累加列表
     
     eachrationum=x_array_num//ratio_num
     leftrationum=x_array_num%ratio_num
     
-    eachrationumlist=[eachrationum]*ratio_num
+    eachrationumlist=[eachrationum]*ratio_num          #各个放缩率对应数量的列表
     
     for i in range((ratio_num-1)//2-(leftrationum-1)//2,(ratio_num-1)//2-(leftrationum-1)//2+leftrationum):
-        eachrationumlist[i]=eachrationumlist[i]+1
+        eachrationumlist[i]=eachrationumlist[i]+1           #将整除后的余值加入到靠中间放缩率的方案中。
         
     rationumaccumulationlist.append(0) 
     
-    for i in range(1,ratio_num):
+    for i in range(1,ratio_num):         #计算放缩率数量累加列表
         rationumaccumulationlist.append(rationumaccumulationlist[i-1]+eachrationumlist[i-1])
     
-    for i in range(0,ratio_num):
+    for i in range(0,ratio_num):            #计算放缩率列表
         ratiolist.append((center_ratio-((ratio_num+1)//2-1)*ratio_diff)+i*ratio_diff)    
-    
-    Ditemlist=d.items()
-    
-    for i in range(0,ratio_num):       
-        for j in range(0,eachrationumlist[i]): 
-            newdict=[]
-            for e in Ditemlist:                      
-                newdict.append([e[0],polylinedatasetarraycopy(e[1],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e[0],len(dictlist))])
+       
+    for i in range(0,ratio_num):        #每种放缩率
+        for j in range(0,eachrationumlist[i]):      #每种放缩率对应数量
+            newdict={}
+            for e in d:                     #将字典中值即每一图层对应的多段线列表进行复制并移动到指定位置
+                newdict[e]=polylinedatasetarraycopy(d[e],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e,len(dictlist))                     
+                #newdict.append([e,polylinedatasetarraycopy(d[e],ratiolist[i],cutline_x_offset+x_blank+(rationumaccumulationlist[i]+j+0.5)*x_length/center_ratio,cutline_y_offset+y_blank+0.5*y_length/center_ratio,e,len(dictlist))])
             dictlist.append(newdict)  
     return (dictlist,ratiolist,eachrationumlist)
+
+
+def holepolylinedictarraycopy(holepolylinedict):
+    """input a hole polyline dataset dict and array them by line
+    """
+    holepolylinearraydict={}
+    for e in holepolylinedict:              #对通孔图层多段线字典进行遍历，将里面的多段线向上阵列
+        holepolylinedataset=[]
+        for row in range(0,y_array_num):           
+            holepolylinedataset.extend(datasetjustcopy(holepolylinedict[e], 1, 0, y_length/center_ratio*row))
+        holepolylinearraydict[e]=holepolylinedataset
+    return holepolylinearraydict
   
 def polylinedatasetarraycopy(l,ratio,x_offset,y_offset,layername,arraycount):
     """copy a polyline dataset and enlarged by a certain ratio
     """ 
-    if layername in justcopylist:
-        dataset=datasetjustcopy(l,x_offset,y_offset)
+    if layername in justcopylist:                      #根据图层名称判断是按中心放缩率直接放大后复制还是按多种放缩率放大后做边上的点的延伸或者不延伸的操作
+        dataset=datasetjustcopy(l,center_ratio,x_offset,y_offset)
     elif layername in extendcopylist:
         dataset=datasetratiocopy_extend(l,ratio,x_offset,y_offset)
     else:
-        if arraycount==0:
+        if arraycount==0:                               #判断是最左边的图案
             dataset=datasetratiocopy_xl_extend(l,ratio,x_offset,y_offset)
-        elif arraycount==x_array_num-1:
+        elif arraycount==x_array_num-1:                 #判断是最右边的图案
             dataset=datasetratiocopy_xr_extend(l,ratio,x_offset,y_offset)
-        else:
+        else:                                           #判断是中间的图案  
             dataset=datasetratiocopy_notextend(l,ratio,x_offset,y_offset)
     return dataset
   
-def datasetjustcopy(l,x_offset,y_offset):
+def datasetjustcopy(l,ratio,x_offset,y_offset): #l-多段线列表  ratio-放缩比例，基点是原点 x_offset y_offset-移动的偏移
     """just enlarged by center ratio
     """
     dataset=[]
     for polyline in l:
         newpolyline=[]
         for pos in polyline:
-            newpolyline.append([pos[0]/center_ratio+x_offset,pos[1]/center_ratio+y_offset])
+            newpolyline.append([pos[0]/ratio+x_offset,pos[1]/ratio+y_offset])
         dataset.append(newpolyline)
     return dataset
 
-def datasetratiocopy_xl_extend(l,ratio,x_offset,y_offset):
+def datasetratiocopy_xl_extend(l,ratio,x_offset,y_offset):#只延伸上下两边以及左边的点
     """just enlarged a dataset by certain ratio with vertex on outline extended
     """
     dataset=[]
@@ -408,7 +421,7 @@ def datasetratiocopy_xl_extend(l,ratio,x_offset,y_offset):
         dataset.append(newpolyline)
     return dataset
 
-def datasetratiocopy_xr_extend(l,ratio,x_offset,y_offset):
+def datasetratiocopy_xr_extend(l,ratio,x_offset,y_offset):#只延伸上下两边以及右边的点
     """just enlarged a dataset by certain ratio with vertex on outline extended
     """
     dataset=[]
@@ -432,7 +445,7 @@ def datasetratiocopy_xr_extend(l,ratio,x_offset,y_offset):
         dataset.append(newpolyline)
     return dataset
 
-def datasetratiocopy_extend(l,ratio,x_offset,y_offset):
+def datasetratiocopy_extend(l,ratio,x_offset,y_offset):#全部四边上的点都延伸
     """just enlarged a dataset by certain ratio with vertex on outline extended
     """
     dataset=[]
@@ -454,7 +467,7 @@ def datasetratiocopy_extend(l,ratio,x_offset,y_offset):
     return dataset
    
 
-def datasetratiocopy_notextend(l,ratio,x_offset,y_offset):
+def datasetratiocopy_notextend(l,ratio,x_offset,y_offset):#虽然说是不延伸，但是上下两边上的点Y方向还是会延伸的。
     """just enlarged a dataset by certain ratio with vertex on outline not extended
     """
     dataset=[]
@@ -468,7 +481,7 @@ def datasetratiocopy_notextend(l,ratio,x_offset,y_offset):
             else:
                 pos_x=pos[0]/ratio+x_offset
             if abs((abs(pos_y)-y_length/2))<0.01:
-                pos_y=pos[1]/center_ratio+y_offset+(abs(pos_y)/pos_y*y_extend_length)
+                pos_y=pos[1]/center_ratio+y_offset+(abs(pos_y)/pos_y*y_extend_length)          #虽然说是不延伸，但是上下两边上的点Y方向还是会延伸的。
             else:
                 pos_y=pos[1]/ratio+y_offset                              
             newpolyline.append([pos_x,pos_y])
@@ -483,26 +496,20 @@ def drawpolylinedict(d,f,vcount):
     """draw polyline dict
     """  
     
-    for e in d:
-        for polyline in e[1]:
+    for e in d:                  #遍历字典
+        for polyline in d[e]:       #遍历字典值，即多段线列表
             vcount=vcount+1
-            f.write("0\nPOLYLINE\n8\n"+e[0]+"\n5\n"+hex(vcount)[2:])
+            f.write("0\nPOLYLINE\n8\n"+e+"\n5\n"+hex(vcount)[2:])
             f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
-            vcount=drawsinglepolyline(polyline, vcount, f,e[0])
+            vcount=drawsinglepolyline(polyline, vcount, f,e)          #绘制单独的多段线
     return vcount
 
-def drawfeilin(polylinedatasetdictlist,origindict):
+def drawfeilin(polylinedatasetdictlist,origindict):#polylinedatasetdictlist-一行中所有图层的字典的列表，其中字典为(key：图层名，value：一个outline中的该图层多段线列表) origindict-原始的未进行操作的字典
     """accept polyline dataset and output them by dxf R12 format to feilin 
     return none """  
-    feilin=file(name_of_feilin+u'(总菲林)'+'.dxf','w') 
-    layernamelist=list(origindict.viewkeys())
-    layernamelist.append("Cutline")
-    
-    feilin_list=[]
-    
-    for layername in layernamelist:
-        if layername[0]!="V" and layername[0]!="v":
-            feilin_list.append(layername)
+    feilin=open(name_of_feilin+'(总菲林)'+'.dxf','w')
+    layernamelist=list(origindict.keys())
+    layernamelist.append("Cutline")   #这里会包括Cutline以及其他除通孔层的图层
                             
     entitiescount=0                                 #为绘制的实体对象计数
     defineTABLESECTION(feilin, layernamelist)
@@ -510,17 +517,75 @@ def drawfeilin(polylinedatasetdictlist,origindict):
     entitiescount=drawcutline(feilin,layernamelist,entitiescount)
 #     entitiescount=drawnote(entitiescount,feilin,len(layernamelist),feilin_list)
     
-    for d in polylinedatasetdictlist:
-        entitiescount=drawpolylinedict(d,feilin,entitiescount)
+    for d in polylinedatasetdictlist:                   
+        entitiescount=drawpolylinedict(d,feilin,entitiescount)         #对每个字典进行多段线打印
     
     feilin.write("0\nENDSEC\n0\nEOF\n")                  # write the end of file
     feilin.close() 
     #for d in polylinedatasetdictlist:
+    
+def outputholepos(dictlist,origindict): #dictlist-一行中所有图层的字典的列表，其中字典为(key：图层名，value：一个outline中的该图层多段线列表) origindict-原始的未进行操作的字典
+    """read the dict list of arrayed polyline dataset,extrated V hole and array them.and then calculate the hole position
+    """
+    
+    layernamelist=list(origindict.keys())
+    
+    hole_list=[]
+    holepolylinedict={}
+    
+    for layername in layernamelist:                             #得到通孔层的名称列表
+        if layername[0]=='V' or layername[0]=='v':
+            hole_list.append(layername)
+            
+    for holelayer in hole_list:                                 #已经阵列好的第一行中每一层通孔多段线存入新的“通孔名称”-“一行中所有通孔多段线”的字典
+        holepolylinelist=[]       
+        for d in dictlist:              
+            holepolylinelist.extend(d[holelayer])
+        holepolylinedict[holelayer]=holepolylinelist
+    
+    holepolylinearraydict=holepolylinedictarraycopy(holepolylinedict)          #对以上生成的字典进行操作，生成新的字典。字典中对应的值“一行中所有通孔多段线”向上阵列布满整个菲林区域
+    
+               
+    holenotefile=open('通孔模式说明'+'.txt','w')  #输出通孔模式说明
+    holenotefile.write("各通孔文件通孔数一览表(不包括5H):\n")
+    for e in holepolylinearraydict:
+        holeposfile=open(e+'.txt','w')
+        centerposlist=calculatecenterpos(holepolylinearraydict[e])
+        centerposlist.sort()
+        holenotefile.write("通孔层    "+e+"    一共有通孔    "+'{:d}'.format(len(centerposlist))+"    个\n")    #输出每一通孔层的中心点数。即对应通孔数量
+        for pos in centerposlist:
+            holeposfile.write('X{:.0f}Y{:.0f}\n'.format(pos[0]*1000,pos[1]*1000))                 #要格式化输出，所以先要乘以1000，然后输出小数点前的部分  
+        holeposfile.close() 
+    
+def calculatecenterpos(holepolylinelist):
+    """input a hole polyline list and calculate the center position of them,offset by the center of the cutline.
+    """
+    center_pos_list=[]
+    for poly in holepolylinelist:
+        center_pos_x=0
+        center_pos_y=0
+        for pos in poly:                            #通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
+            center_pos_x=center_pos_x+pos[0]
+            center_pos_y=center_pos_y+pos[1]
+        center_pos_x=center_pos_x/len(poly)-(cutline_x_offset+ringdistance/2)
+        center_pos_y=center_pos_y/len(poly)-(cutline_y_offset+ringdistance/2)
+        center_pos_list.append([center_pos_x,center_pos_y])
+    return center_pos_list
         
-def outputinfo(ratiolist,eachrationumlist):
+def outputinfo(d,ratiolist,eachrationumlist):
     """output feilin information
     """
-    info=file(u'菲林说明文件'+'.txt','w')
+    hole_list=[]
+    feilin_list=[]
+    layernamelist=list(d.keys())
+    for layername in layernamelist:             #生成通孔以及菲林的名称列表
+        if layername[0]=='V' or layername[0]=='v':
+            hole_list.append(layername)
+        elif layername!="Outline":
+            feilin_list.append(layername)
+    
+
+    info=open('菲林说明文件'+'.txt','w')
     info.write(name_of_feilin+"丝网设计转化报告\n")
     info.write("转化时间:    "+time.strftime('%Y-%m-%d %A %X',time.localtime(time.time()))+"\n")
     info.write("转化人:     "+author_name+"\n")
@@ -539,6 +604,13 @@ def outputinfo(ratiolist,eachrationumlist):
     info.write("菲林切割线长度检验标准\n")
     info.write("X方向切割线总长度:    "+'{:.4f}'.format(round(x_length/center_ratio*x_array_num,4))+"mm\n")
     info.write("Y方向切割线总长度:    "+'{:.4f}'.format(round(y_length/center_ratio*y_array_num,4))+"mm\n")
+    #info.write("说明:通孔的图层为"+str(hole_list)+"\n")
+    info.write("\n\n菲林设计人:"+author_name+"\n")
+    info.write("菲林设计时间:"+time.strftime('%Y-%m-%d %X',time.localtime(time.time()))+"\n")
+    info.write("说明:需要制作菲林的图层为")
+    for feilin in feilin_list:
+        info.write(feilin+" ")
+    info.write("\n阵列方式:请将以上图层图案向上阵列"+str(y_array_num)+"行，行偏移为"+'{:.4f}'.format(round(y_length/center_ratio,4))+"mm\n")
     info.close()    
       
     
@@ -703,9 +775,9 @@ if __name__=='__main__':
     buildfilelist()
     polylinedatasetdict=extractpolylinefromdxf()        
     #outputarraydataset(polylinedatasetdict)
-    #outputfeilindataset(polylinedatasetdict)
-       
+    #outputfeilindataset(polylinedatasetdict)  
     (dictlist,ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict)
     drawfeilin(dictlist,polylinedatasetdict)
-    outputinfo(ratiolist,eachrationumlist)
+    outputholepos(dictlist,polylinedatasetdict)
+    outputinfo(polylinedatasetdict,ratiolist,eachrationumlist)
  
