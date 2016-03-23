@@ -14,4 +14,16 @@
 	<natures>
 		<nature>org.python.pydev.pythonNature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>drawfeilin.py</name>
+			<type>1</type>
+			<location>M:/work/workspace/draw_feilin/drawfeilin.py</location>
+		</link>
+		<link>
+			<name>sdxf.py</name>
+			<type>1</type>
+			<location>M:/work/workspace/draw_feilin/sdxf.py</location>
+		</link>
+	</linkedResources>
 </projectDescription>
