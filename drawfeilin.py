@@ -8,12 +8,7 @@ import ConfigParser
 import codecs
 import copy
 #reading file 
-readfilelist=[]
-#writefilelist=[]
-mypath=os.path.dirname(sys.argv[0])
-mypath=os.path.abspath(mypath)
-os.chdir(mypath)
-filelist= os.listdir(mypath)
+
 
 #全局变量，后期会形成配置文件
 
@@ -262,12 +257,20 @@ def drawwidthpolyline(l,vcount,f,layername): #l-polyline vcount-vertex count f-f
 def buildfilelist():
     """input nothing and return nothing
     """
-    for files in filelist:
-        if os.path.splitext(files)[1]=='.dxf':   #查找目录下的dxf文件，加入到readfilelist文件列表中 
-            readfilelist.append(files)
-    #feilin=file('feilin(ph).dxf','w')                 #新建一个文件，名字先占位用，后续改成由配置文件中读入名称。 
+    readfilelist=[]
+    #writefilelist=[]
+    mypath=os.path.dirname(sys.argv[0])
+    mypath=os.path.abspath(mypath)
+    os.chdir(mypath)
+    filelist= os.listdir(mypath)
     
-def extractpolylinefromdxf():
+    for onefile in filelist:
+        if os.path.splitext(onefile)[1]=='.dxf' and not (globalconfig.NAME_OF_FEILIN in unicode(os.path.splitext(onefile)[0],"gbk").encode('utf-8')):   #查找目录下的dxf文件，加入到readfilelist文件列表中 
+            readfilelist.append(onefile)
+    #feilin=file('feilin(ph).dxf','w')                 #新建一个文件，名字先占位用，后续改成由配置文件中读入名称。 
+    return readfilelist
+    
+def extractpolylinefromdxf(readfilelist):
     """extract all polyline from a R12 format dxf file and store them by a list of (vortex list)=polyline 
     return a dictionary,each key of it is the filename of dxf represent the layername of the polyline and the value is the polyline dataset
     """
@@ -403,7 +406,7 @@ def holepolylinedictarraycopy(holepolylinedict):
     for e in holepolylinedict:              #对通孔图层多段线字典进行遍历，将里面的多段线向上阵列
         holepolylinedataset=[]
         for row in range(0,globalconfig.Y_ARRAY_NUM):           
-            holepolylinedataset.extend(datasetjustcopy(holepolylinedict[e], 1, 0, globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO*row))
+            holepolylinedataset.extend(datasetjustcopy(holepolylinedict[e], 1,1, 0, globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO*row))
         holepolylinearraydict[e]=holepolylinedataset
     return holepolylinearraydict
   
@@ -631,7 +634,7 @@ def outputinfo(d,x_ratiolist,y_ratiolist,eachrationumlist):
     
     #info.write("放缩方案 : "+str(ratiolist)+"\n")
     #info.write("每个放缩率一行对应数量 : "+str(eachrationumlist)+"\n")
-    info.write("瓷体X方向对应放缩率: "+str(globalconfig.X_CENTER_RATIO)+"瓷体Y方向对应放缩率: "+str(globalconfig.Y_CENTER_RATIO)+"\n")
+    info.write("瓷体X方向对应放缩率: "+str(globalconfig.X_CENTER_RATIO)+"    瓷体Y方向对应放缩率: "+str(globalconfig.Y_CENTER_RATIO)+"\n")
     
     info.write("丝网排列情况: \n")
     info.write("列     "+str(globalconfig.X_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO,4))+"mm\n")
@@ -1396,9 +1399,9 @@ def main():
     feilin.styles.append(Style())                #table styles
     feilin.views.append(View('Normal'))          #table view
     #feilin.views.append(ViewByWindow('Window',leftBottom=(1,0),rightTop=(2,1)))  #idem
-       
-    buildfilelist()
-    polylinedatasetdict=extractpolylinefromdxf()   
+    
+    readfilelist=buildfilelist()
+    polylinedatasetdict=extractpolylinefromdxf(readfilelist)   
     (dictlist,x_ratiolist,y_ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict)
     
     layernamelist=list(polylinedatasetdict.viewkeys())
@@ -1448,39 +1451,13 @@ def main():
     for mark in markpointlistdict: 
         for markpoint in markpointlistdict[mark]:
             feilin.append(Text(layer='Mark',text=mark,point=markpoint,height=1.0,rotation=globalconfig.MARK_ROTATION_ANGLE))  
-                
-    #feilin.append(Mtext(layer='0',text=feilininfo(feilin_list),point=(180+globalconfig.CUTLINE_X_OFFSET,70+globalconfig.CUTLINE_Y_OFFSET,0),color=5))
-    
-    
-                
-    #outputholepos(dictlist,polylinedatasetdict)
-                       
-                        
-                        #绘制单独的多段线
-    #entities
-#     d.append(Circle(center=(1,1,0),color=3))
-#     d.append(Face(points=[(0,0,0),(1,0,0),(1,1,0),(0,1,0)],color=4))
-#     d.append(Insert('test',point=(3,3,3),cols=5,colspacing=2))
-#     d.append(Line(points=[(0,0,0),(1,1,1)]))
-#     d.append(Mtext('Click on Ads\nmultiple lines with mtext',point=(1,1,1),color=5,rotation=90))
-#     d.append(Text('Please donate!',point=(3,0,1)))
-#     d.append(Rectangle(point=(2,2,2),width=4,height=3,color=6,solid=Solid(color=2)))
-#     d.append(Solid(points=[(4,4,0),(5,4,0),(7,8,0),(9,9,0)],color=3))
-    
-    #lwpoints=[[1,1,0],[2,1,0],[2,2,0],[1,2,0]]
-    #feilin.append(PolyLine(points=lwpoints,layer='0',flag=1))
-    
+                    
     feilin.saveas(globalconfig.NAME_OF_FEILIN+u'(总菲林)'+'.dxf')   
     outputinfo(polylinedatasetdict,x_ratiolist,y_ratiolist,eachrationumlist)
     outputholepos(dictlist,polylinedatasetdict)
 
 if __name__=='__main__':
     globalconfig=Globalconfig()     
-    #outputarraydataset(polylinedatasetdict)
-    #outputfeilindataset(polylinedatasetdict)  
     main()
     
-    #(dictlist,ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict)
-    #drawfeilin(dictlist,polylinedatasetdict)
-    #outputholepos(dictlist,polylinedatasetdict)
-    #outputinfo(polylinedatasetdict,ratiolist,eachrationumlist)
+
