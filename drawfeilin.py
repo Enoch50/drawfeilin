@@ -7,16 +7,8 @@ import time
 import ConfigParser
 import codecs
 import copy
+from math import sqrt
 #reading file 
-
-
-#全局变量，后期会形成配置文件
-
-
-#切割线绘制相关                   
-Is_8inch=True
-Is_6inch=False
-
 
 class Globalconfig(object):
     """read the config file
@@ -42,7 +34,7 @@ class Globalconfig(object):
         self.Y_EXTENDED_LENGTH=self.config.getfloat('DEFAULT',u'引出端y方向延伸距离')
         self.CUTLINE_X_OFFSET=self.config.getfloat('DEFAULT',u'切割线x方向偏移距离')
         self.CUTLINE_Y_OFFSET=self.config.getfloat('DEFAULT',u'切割线y方向偏移距离')
-        self.RING_DISTANCE=self.config.getfloat('DEFAULT',u'定位圆环中心距')
+        #self.RING_DISTANCE=self.config.getfloat('DEFAULT',u'定位圆环中心距')
         self.NAME_OF_FEILIN=self.config.get('DEFAULT',u'菲林名称').encode('utf-8')
         self.JUSTCOPYLIST=tuple(self.config.get('DEFAULT',u'不做多种放缩的图层').encode('utf-8').split('|'))
         self.EXTENDCOPYLIST=tuple(self.config.get('DEFAULT',u'需要做xy方向延伸的图层').encode('utf-8').split('|'))
@@ -50,115 +42,46 @@ class Globalconfig(object):
         self.MARK_ROTATION_ANGLE=self.config.getint('DEFAULT',u'MARK旋转角度')
         self.MARK_X_OFFSET=self.config.getfloat('DEFAULT',u'MARK的X方向偏移')
         self.MARK_Y_OFFSET=self.config.getfloat('DEFAULT',u'MARK的Y方向偏移')
+        self.FEILIN_INCH=self.config.getint('DEFAULT',u'菲林英寸')      
+        
+        if self.FEILIN_INCH==6:
+            self.RING_DISTANCE=122.4
+            self.RING_RADIUS=0.3
+        elif self.FEILIN_INCH==8:
+            self.RING_DISTANCE=171.68
+            self.RING_RADIUS=0.215
+        else:
+            self.RING_DISTANCE=self.FEILIN_INCH*25.4-30
+            self.RING_RADIUS=0.215
+            
+        self.RING_OFFSET=3.8
+        self.LENGTH_OF_CROSS=1.5
+        self.CUTLINE_LENGTH=3.0
+        self.CUTLINE_WIDTH=0.08
+        self.RING_WIDTH=0.1
+        self.FIFTH_RING_OFFSET=4.0
         
         self.X_BLANK=(self.RING_DISTANCE-self.X_LENGTH/self.X_CENTER_RATIO*self.X_ARRAY_NUM)/2
         self.Y_BLANK=(self.RING_DISTANCE-self.Y_LENGTH/self.Y_CENTER_RATIO*self.Y_ARRAY_NUM)/2
 
-def defineTABLESECTION(f,layernamelist):
-    """define dxf table section
-    """
-    
-    layercolordict={}
-    for layername in layernamelist:
-        t=random.randint(10,17)
-        layercolordict[layername]=random.randrange(10+t,240+t,10)
-        
-    layercolordict["Outline"]=1
-    layercolordict["Mark"]=5
-    layercolordict["Cutline"]=2
-    
-    f.write("0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n2\n") 
-    for layername in layernamelist:
-        f.write("0\nLAYER\n2\n"+layername+"\n70\n0\n62\n"+str(layercolordict[layername])+"\n6\nCONTINUOUS\n")
-    f.write("0\nENDTAB\n0\nENDSEC\n")   
-
-def defineBLOCKSECTION(f,layernamelist):
-    """define dxf BLOCK section
-    """
-    feilinname_lineheight=2.5
-    #note_lineheigh=4
-    layercount=0
-    feilin_name_pos=[70.0+globalconfig.CUTLINE_X_OFFSET,185.0+globalconfig.CUTLINE_Y_OFFSET]
-    #note_pos=[190.0+globalconfig.CUTLINE_X_OFFSET,80.0+globalconfig.CUTLINE_Y_OFFSET]
-    f.write("0\nSECTION\n2\nBLOCKS\n")            #绘制块定义
-    f.write("0\nBLOCK\n8\n0\n2\nROUND_1\n70\n0\n10\n0.0\n20\n0.0\n30\n0.0\n")
-    f.write("0\nPOLYLINE\n8\n0\n5\n3F\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
-    f.write("40\n0.04\n41\n0.04")
-    f.write("\n0\nVERTEX\n5\n406\n8\n0\n10\n-0.02\n20\n0.0\n30\n0.0\n42\n1.0")
-    f.write("\n0\nVERTEX\n5\n407\n8\n0\n10\n0.02\n20\n0.0\n30\n0.0\n42\n1.0\n0\nSEQEND\n5\n408\n8\n0\n")
-    f.write("0\nENDBLK\n5\n43\n8\n0\n")  
-    
-    for layername in layernamelist:
-        layercount=layercount+1
-        f.write("0\nBLOCK\n8\n0\n2\n*U"+str(layercount)+"\n")                 
-        f.write("70\n1\n10\n0.0\n20\n0.0\n30\n0.0\n") 
-        f.write("0\nTEXT\n5\n46\n8\n"+layername+"\n6\nCONTINUOUS\n10\n"+str(feilin_name_pos[0])+"\n20\n"+str(feilin_name_pos[1])+"\n30\n0.0\n")
-        f.write("40\n"+str(feilinname_lineheight)+"\n1\n"+globalconfig.NAME_OF_FEILIN+"-"+layername+"\n0\nENDBLK\n5\n47\n8\n"+layername+"\n")
-    
-#     layercount=layercount+1
-#     f.write("0\nBLOCK\n8\n0\n2\n*U"+str(layercount)+"\n")                 
-#     f.write("70\n1\n10\n0.0\n20\n0.0\n30\n0.0\n") 
-#     f.write("0\nTEXT\n5\n46\n8\n"+layername+"\n6\nCONTINUOUS\n10\n"+str(note_pos[0])+"\n20\n"+str(note_pos[1])+"\n30\n0.0\n")
-#     f.write("40\n"+str(note_lineheigh)+"\n1\n")
-#     f.write("")
-#     f.write("\n0\nENDBLK\n5\n47\n8\n0\n") 
-           
-    f.write("0\nENDSEC\n")
-    
-def drawtext(vcount,f,layername,textcount):
-    """draw text in cutline
-    """
-    vcount=vcount+1
-    f.write("0\nINSERT\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n6\nCONTINUOUS\n")           
-    f.write("2\n*U"+str(textcount)+"\n10\n0.0\n20\n0.0\n30\n0.0\n")
-    return vcount
-
-# def drawnote(vcount,f,tc,fl):
-#     """draw feilin note
-#     """
-#     tc=tc+1
-#     vcount=vcount+1
-#     f.write("0\nINSERT\n8\n0\n5\n"+hex(vcount)[2:]+"\n6\nCONTINUOUS\n")           
-#     f.write("2\n*U"+str(tc)+"\n10\n0.0\n20\n0.0\n30\n0.0\n")
-#     
-#     return vcount
-
-def drawcutline(f,layernamelist,cutline_entities_count):
-    """draw the cutline of feilin
-    """ 
-      
-    #layernamelist=[layernamelist[0]]               
-    layercount=0
-    ringlist=[[[-0.215+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[0.215+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET]],
-              [[-0.215+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET],[0.215+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET]],
-              [[-0.215+globalconfig.CUTLINE_X_OFFSET,175.68+globalconfig.CUTLINE_Y_OFFSET],[0.215+globalconfig.CUTLINE_X_OFFSET,175.68+globalconfig.CUTLINE_Y_OFFSET]],
-              [[171.4650+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[171.8950+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET]],
-              [[171.4650+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET],[171.8950+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET]]]
-    flashlist=buildflashlist()
-    cutlineset=buildcutlineset()                                 
-    
-    f.write("0\nSECTION\n2\nENTITIES\n")
-    
-    for layername in layernamelist:
-        layercount=layercount+1
-        for polyline in cutlineset:
-            cutline_entities_count=cutline_entities_count+1
-            f.write("0\nPOLYLINE\n8\n"+layername+"\n5\n"+hex(cutline_entities_count)[2:])         # begin writing a polyline
-            f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n40\n0.08\n41\n0.08\n")
-            cutline_entities_count=drawwidthpolyline(polyline, cutline_entities_count, f,layername)
-        cutline_entities_count=drawring(ringlist, cutline_entities_count, f, layername)
-        cutline_entities_count=drawflash(flashlist, cutline_entities_count, f, layername)
-        cutline_entities_count=drawtext(cutline_entities_count, f, layername,layercount)
-    
-    return cutline_entities_count
-
 def buildcutlineset():
     """build cutline polyline set
     """
-    cutlineset=[[[-3.2697,-3.2697],[-4.3304,-4.3304]],[[-3.2697,-4.3304],[-4.3304,-3.2697]]]
-    cutlineset.extend([[[-3.2697,176.0104],[-4.3304,174.9497]],[[-3.2697,174.9497],[-4.3304,176.0104]]])
-    cutlineset.extend([[[176.0104,176.0104],[174.9497,174.9497]],[[176.0104,174.9497],[174.9497,176.0104]]])
-    cutlineset.extend([[[175.4800,-3.05],[175.4800,-4.55]],[[174.7300,-3.8],[176.2300,-3.8]]])
+    cutlineset=[]
+    
+    crosspointlist=[[-globalconfig.RING_OFFSET,-globalconfig.RING_OFFSET],[-globalconfig.RING_OFFSET,globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE],[globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE,globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE]]
+    
+    for crosspoint in crosspointlist: 
+        cutlineset.append([[crosspoint[0]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2],[crosspoint[0]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2]])
+        cutlineset.append([[crosspoint[0]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2],[crosspoint[0]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2]])
+    
+    cutlineset.append([[globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE+globalconfig.LENGTH_OF_CROSS/2,-globalconfig.RING_OFFSET],[globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE-globalconfig.LENGTH_OF_CROSS/2,-globalconfig.RING_OFFSET]])
+    cutlineset.append([[globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE,-globalconfig.RING_OFFSET+globalconfig.LENGTH_OF_CROSS/2],[globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE,-globalconfig.RING_OFFSET-globalconfig.LENGTH_OF_CROSS/2]])
+    
+    #cutlineset=[[[-3.2697,-3.2697],[-4.3304,-4.3304]],[[-3.2697,-4.3304],[-4.3304,-3.2697]]]
+    #cutlineset.extend([[[-3.2697,176.0104],[-4.3304,174.9497]],[[-3.2697,174.9497],[-4.3304,176.0104]]])
+    #cutlineset.extend([[[176.0104,176.0104],[174.9497,174.9497]],[[176.0104,174.9497],[174.9497,176.0104]]])
+    #cutlineset.extend([[[175.4800,-3.05],[175.4800,-4.55]],[[174.7300,-3.8],[176.2300,-3.8]]])
     
     for cutline in cutlineset:
         for pos in cutline:
@@ -166,44 +89,67 @@ def buildcutlineset():
             pos[1]=pos[1]+globalconfig.CUTLINE_Y_OFFSET
     
     for row in range(0,globalconfig.X_ARRAY_NUM+1):
-        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,-3.0+globalconfig.CUTLINE_Y_OFFSET]])
-        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,174.68+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET]])
     for line in range(0,globalconfig.Y_ARRAY_NUM+1):
-        cutlineset.append([[0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[-3.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
-        cutlineset.append([[171.68+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[174.68+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
     return cutlineset
 
 def buildflashlist():
     """build flash set
     """
-         
-    flashlist=[[-3.2697,-3.2697],[-4.3304,-4.3304],[-3.2697,-4.3304],[-4.3304,-3.2697]]
-    flashlist.extend([[-3.2697,176.0104],[-4.3304,174.9497],[-3.2697,174.9497],[-4.3304,176.0104]])
-    flashlist.extend([[176.0104,176.0104],[174.9497,174.9497],[176.0104,174.9497],[174.9497,176.0104]])
-    flashlist.extend([[175.4800,-3.05],[175.4800,-4.55],[174.7300,-3.8],[176.2300,-3.8]])
+    flashlist=[]
+    crosspointlist=[[-globalconfig.RING_OFFSET,-globalconfig.RING_OFFSET],[-globalconfig.RING_OFFSET,globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE],[globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE,globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE]]
     
+    for crosspoint in crosspointlist: 
+        flashlist.append([crosspoint[0]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2])
+        flashlist.append([crosspoint[0]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2])
+        flashlist.append([crosspoint[0]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2])
+        flashlist.append([crosspoint[0]-globalconfig.LENGTH_OF_CROSS/sqrt(2)/2,crosspoint[1]+globalconfig.LENGTH_OF_CROSS/sqrt(2)/2]) 
+        
+    flashlist.append([globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE+globalconfig.LENGTH_OF_CROSS/2,-globalconfig.RING_OFFSET])  
+    flashlist.append([globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE-globalconfig.LENGTH_OF_CROSS/2,-globalconfig.RING_OFFSET])
+    flashlist.append([globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE,-globalconfig.RING_OFFSET+globalconfig.LENGTH_OF_CROSS/2])
+    flashlist.append([globalconfig.RING_OFFSET+globalconfig.RING_DISTANCE,-globalconfig.RING_OFFSET-globalconfig.LENGTH_OF_CROSS/2]) 
+#     flashlist=[[-3.2697,-3.2697],[-4.3304,-4.3304],[-3.2697,-4.3304],[-4.3304,-3.2697]]
+#     flashlist.extend([[-3.2697,176.0104],[-4.3304,174.9497],[-3.2697,174.9497],[-4.3304,176.0104]])
+#     flashlist.extend([[176.0104,176.0104],[174.9497,174.9497],[176.0104,174.9497],[174.9497,176.0104]])
+#     flashlist.extend([[175.4800,-3.05],[175.4800,-4.55],[174.7300,-3.8],[176.2300,-3.8]])
+#     
     for flash in flashlist:
         flash[0]=flash[0]+globalconfig.CUTLINE_X_OFFSET
         flash[1]=flash[1]+globalconfig.CUTLINE_Y_OFFSET
     
-    for row in range(0,globalconfig.X_ARRAY_NUM):
+    for row in range(0,globalconfig.X_ARRAY_NUM+1):
         flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,-3.0+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,174.68+globalconfig.CUTLINE_Y_OFFSET])
-    for line in range(0,globalconfig.Y_ARRAY_NUM):
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET])
+    for line in range(0,globalconfig.Y_ARRAY_NUM+1):
         flashlist.append([0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([-3.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([171.68+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([174.68+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
     return flashlist
+
+def buildringlist():
+    '''build ring list
+    '''
+    ringlist=[[[-globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET]],
+              [[-globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET]],
+              [[-globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,globalconfig.FIFTH_RING_OFFSET+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,globalconfig.FIFTH_RING_OFFSET+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET]],
+              [[globalconfig.RING_DISTANCE-globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.RING_DISTANCE+globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET]],
+              [[globalconfig.RING_DISTANCE-globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.RING_DISTANCE+globalconfig.RING_RADIUS+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET]]]
+    
+    return ringlist
 
 def buildmarkpointlist(eachrationumlist):
     """build mark point list
     """
     
     markpointlistdict={}
-    marklist=['A','B','C','D','E','F','G','H']
+    marklist=['A','B','C','D','E','F','G','H','I','J','K']
     markpointlist=[]
     rationumaccumulationlist=[]
     rationumaccumulationlist.append(0)   
@@ -217,43 +163,6 @@ def buildmarkpointlist(eachrationumlist):
         markpointlistdict[marklist[i]]=markpointlist
     return markpointlistdict
     
-def drawring(s,vcount,f,layername):#s-ringset vcount-vertex count f-file layername-name of layer 
-    """draw ring in cutine
-    """
-    for l in s:
-        vcount=vcount+1
-        f.write("0\nPOLYLINE\n8\n"+layername+"\n5\n"+hex(vcount)[2:])
-        f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n40\n0.1\n41\n0.1\n")
-        for pos in l:
-            vcount=vcount+1
-            f.write("0\nVERTEX\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n")           
-            f.write('10\n{:.4f}\n20\n{:.4f}\n30\n0.0\n42\n1.0\n'.format(pos[0],pos[1]))
-        vcount=vcount+1
-        f.write("0\nSEQEND\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n") 
-    return vcount
-
-def drawflash(l,vcount,f,layername):#l-polyline vcount-vertex count f-file layername-name of layer 
-    """draw flash in cutline
-    """
-    for pos in l:
-        vcount=vcount+1
-        f.write("0\nINSERT\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n2\nROUND_1\n")           
-        f.write('10\n{:.4f}\n20\n{:.4f}\n30\n0.0\n'.format(pos[0],pos[1]))
-    vcount=vcount+1
-    return vcount
-        
-def drawwidthpolyline(l,vcount,f,layername): #l-polyline vcount-vertex count f-file layername-name of layer 
-    """read a polyline and output dxf format writing to a specific file
-    """
-    for pos in l:
-        vcount=vcount+1
-        f.write("0\nVERTEX\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n")           
-        f.write('10\n{:.4f}\n20\n{:.4f}\n30\n0.0\n'.format(pos[0],pos[1]))             # write a point 
-        #filetowrite.write('X{:07.3f}Y{:07.3f}\n'.format(pos[0],pos[1])) 
-    vcount=vcount+1    
-    f.write("0\nSEQEND\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n")                             # finished writing a polyline
-    return vcount
-
 def buildfilelist():
     """input nothing and return nothing
     """
@@ -336,34 +245,7 @@ def extractpolylinefromdxf(readfilelist):
         d[layername]=dataset 
     d["Outline"]=[[[globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2],[globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2]]]
     return d
-
-            
-# def outputarraydataset(d):
-#     """accept polyline dataset and output them by dxf R12 format to an array
-#     return none """   
-#     feilin=file(globalconfig.NAME_OF_FEILIN+'.dxf','w') 
-#     feilin.write("0\nSECTION\n2\nENTITIES\n")
-#     Dlist=d.items()                             #将字典转换为数据
-#     polycount=0                                 #为绘制的多段线计数
-#     
-#     for e in Dlist: 
-#         if e[0]=="Outline":                           
-#             VariousRatiolist=Arraydataset(xarraglobalconfig.Y_LENGTH, globalconfig.RATIO_NUM,e[1])
-#         elif e[0]=="Mark":
-#             VariousRatiolist=Arraydataset(xarraglobalconfig.Y_LENGTH, globalconfig.RATIO_NUM,e[1])
-#         else:            
-#             VariousRatiolist=manipulatedataset_extendver(xarraglobalconfig.Y_LENGTH, globalconfig.CENTER_RATIO, globalconfig.RATIO_NUM,e[1])        #读取将数据内的key，value组，并将其中的dataset经过manipulatedict函数转换为dataset的数组。                             
-#         for dataset in VariousRatiolist:
-#             for polyline in dataset:
-#                 polycount=polycount+1
-#                 feilin.write("0\nPOLYLINE\n8\n"+e[0]+"\n5\n"+hex(polycount)[2:])         # begin writing a polyline
-#                 feilin.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
-#                 polycount=drawsinglepolyline(polyline, polycount, feilin,e[0])
-#                     
-#     feilin.write("0\nENDSEC\n0\nEOF\n")                   # write the end of file
-#     feilin.close()    
-    
-    
+  
 def polylinedictarraycopy(d):#d——原始图层多段线字典
     """input a polyline dict and array them by row
     """  
@@ -530,40 +412,6 @@ def datasetratiocopy_notextend(l,x_ratio,y_ratio,x_offset,y_offset):#虽然说�
     
     return dataset
     
-    
-
-def drawpolylinedict(d,f,vcount):
-    """draw polyline dict
-    """  
-    
-    for e in d:                  #遍历字典
-        for polyline in d[e]:       #遍历字典值，即多段线列表
-            vcount=vcount+1
-            f.write("0\nPOLYLINE\n8\n"+e+"\n5\n"+hex(vcount)[2:])
-            f.write("\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n1\n")
-            vcount=drawsinglepolyline(polyline, vcount, f,e)          #绘制单独的多段线
-    return vcount
-
-def drawfeilin(polylinedatasetdictlist,origindict):#polylinedatasetdictlist-一行中所有图层的字典的列表，其中字典为(key：图层名，value：一个outline中的该图层多段线列表) origindict-原始的未进行操作的字典
-    """accept polyline dataset and output them by dxf R12 format to feilin 
-    return none """  
-    feilin=file(globalconfig.NAME_OF_FEILIN+u'(总菲林)'+'.dxf','w')
-    layernamelist=list(origindict.viewkeys())
-    layernamelist.append("Cutline")   #这里会包括Cutline以及其他除通孔层的图层
-                            
-    entitiescount=0                                 #为绘制的实体对象计数
-    defineTABLESECTION(feilin, layernamelist)
-    defineBLOCKSECTION(feilin, layernamelist)
-    entitiescount=drawcutline(feilin,layernamelist,entitiescount)
-#     entitiescount=drawnote(entitiescount,feilin,len(layernamelist),feilin_list)
-    
-    for d in polylinedatasetdictlist:                   
-        entitiescount=drawpolylinedict(d,feilin,entitiescount)         #对每个字典进行多段线打印
-    
-    feilin.write("0\nENDSEC\n0\nEOF\n")                  # write the end of file
-    feilin.close() 
-    #for d in polylinedatasetdictlist:
-    
 def outputholepos(dictlist,origindict): #dictlist-一行中所有图层的字典的列表，其中字典为(key：图层名，value：一个outline中的该图层多段线列表) origindict-原始的未进行操作的字典
     """read the dict list of arrayed polyline dataset,extrated V hole and array them.and then calculate the hole position
     """
@@ -663,165 +511,6 @@ def feilininfo(feilin_list):
     +'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO,4))+'mm\n'
    
     return feilininfostr
-    
-    
-# def Arraydataset(offset_x,n,l):   #offset_x=distance between neighbouring dataset polyline n=how much ratio l=polyline dataset
-#     """accept polyline dataset and enlarged them by n times with certain ratio,move them with an offset
-#     return a list of polyline list""" 
-#     polylinelistlist=[]
-#     polylinelistlist.append(l)
-#     for plancount in range(1,n+1):
-#         newdataset=[]
-#         for polyline in l:
-#             newpolyline=[]
-#             for pos in polyline:
-#                 newpolyline.append([pos[0]/globalconfig.CENTER_RATIO+offset_x*plancount,pos[1]/globalconfig.CENTER_RATIO])
-#             newdataset.append(newpolyline)
-#         polylinelistlist.append(newdataset)   
-#     return polylinelistlist 
-# 
-# def feilindataset(offset_x,n,l):
-#     """accept polyline dataset and enlarged them by n times with certain ratio,copy the enlarged dataset for several times,with an offset.
-#     return a list of polyline list    
-#     """
-       
-
-# def manipulatedataset_extendver(offset_x,ratio,n,l):   
-#     """accept polyline dataset and output them by dxf R12 format
-#     return a list of polyline list
-#     the vertex on the origin outline will be move the new enlarged outline and according to the globalconfig.X_EXTENDED_LENGTH or globalconfig.Y_EXTENDED_LENGTH,move outside of the enlarged outline
-#     """ 
-#     polylinelistlist=[]
-#     polylinelistlist.append(l)
-#     for plancount in range(1,n+1):
-#         newdataset=[]
-#         for polyline in l:
-#             newpolyline=[]
-#             for pos in polyline:
-#                 pos_x=pos[0]
-#                 pos_y=pos[1]
-#                 if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
-#                     pos_x=pos[0]/ratio+offset_x*plancount+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)               
-#                 else:
-#                     pos_x=pos[0]/((ratio*100-((n+1)/2-plancount))/100)+offset_x*plancount
-#                 if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:
-#                     pos_y=pos[1]/ratio+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)
-#                 else:
-#                     pos_y=pos[1]/((ratio*100-((n+1)/2-plancount))/100)                                  
-#                 newpolyline.append([pos_x,pos_y])
-#             newdataset.append(newpolyline)
-#         polylinelistlist.append(newdataset)   
-#     return polylinelistlist
-# 
-# 
-# def manipulatedataset_notextendver(offset_x,ratio,n,l):  
-#     """accept polyline dataset and output them by dxf R12 format
-#     return a list of polyline list
-#     the vertex on the origin outline will be moved to the new enlarged outline
-#     """ 
-#     polylinelistlist=[]
-#     polylinelistlist.append(l)
-#     for plancount in range(1,n+1):
-#         newdataset=[]
-#         for polyline in l:
-#             newpolyline=[]
-#             for pos in polyline:
-#                 pos_x=pos[0]
-#                 pos_y=pos[1]
-#                 if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01:                       #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline
-#                     pos_x=pos[0]/ratio+offset_x*plancount
-#                 else:
-#                     pos_x=pos[0]/((ratio*100-((n+1)/2-plancount))/100)+offset_x*plancount
-#                 if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:                        #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline
-#                     pos_y=pos[1]/ratio
-#                 else:
-#                     pos_y=pos[1]/((ratio*100-((n+1)/2-plancount))/100)                                  
-#                 newpolyline.append([pos_x,pos_y])
-#             newdataset.append(newpolyline)
-#         polylinelistlist.append(newdataset)   
-#     return polylinelistlist
-
-# def manipulatedataset_notextend_move_ver(offset_x,ratio,n,l):  
-#     """accept polyline dataset and output them by dxf R12 format
-#     return a list of polyline list
-#     if a polyline has vertex on the origin outline,it will be move to align with the outline.
-#     """ 
-#     polylinelistlist=[]
-#     polylinelistlist.append(l)
-#     for plancount in range(1,n+1):
-#         newdataset=[]
-#         for polyline in l:
-#             newpolyline=[]
-#             polytrait=scanpolyline(polyline)
-#             if polytrait=="poly_is_on_woutline":
-#                 for pos in polyline:
-#                     pos_x=pos[0]/((ratio*100-((n+1)/2-plancount))/100)+pos[0]/ratio+offset_x*plancount
-#                     pos_y=pos[1]
-#                     newpolyline.append([pos_x,pos_y])
-#                 newdataset.append(newpolyline)
-#         polylinelistlist.append(newdataset)   
-#     return polylinelistlist
-
-
-
-# def manipulatedataset_extend_move_ver(offset_x,ratio,n,l):  
-#     """accept polyline dataset and output them by dxf R12 format
-#     return a list of polyline list
-#     if a polyline has vertex on the origin outline,it will be move to align with the outline.and according to the globalconfig.X_EXTENDED_LENGTH or globalconfig.Y_EXTENDED_LENGTH,move outside of the enlarged outline
-#     """ 
-#     polylinelistlist=[]
-#     polylinelistlist.append(l)
-#     for plancount in range(1,n+1):
-#         newdataset=[]
-#         for polyline in l:
-#             newpolyline=[]
-#             for pos in polyline:
-#                 pos_x=pos[0]
-#                 pos_y=pos[1]
-#                 if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01:
-#                     pos_x=pos[0]/ratio+offset_x*plancount
-#                 else:
-#                     pos_x=pos[0]/((ratio*100-((n+1)/2-plancount))/100)+offset_x*plancount
-#                 if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:
-#                     pos_y=pos[1]/ratio
-#                 else:
-#                     pos_y=pos[1]/((ratio*100-((n+1)/2-plancount))/100)                                  
-#                 newpolyline.append([pos_x,pos_y])
-#             newdataset.append(newpolyline)
-#         polylinelistlist.append(newdataset)   
-#     return polylinelistlist
-
-
-def drawsinglepolyline(l,vcount,f,layername): #l-polyline vcount-vertex count f-file layername-name of layer
-    """read a polyline and output dxf format writing to a specific file
-    """
-    for pos in l:
-        vcount=vcount+1
-        f.write("0\nVERTEX\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n")           
-        f.write('10\n{:.4f}\n20\n{:.4f}\n30\n0.0\n'.format(pos[0],pos[1]))             # write a point 
-        #filetowrite.write('X{:07.3f}Y{:07.3f}\n'.format(pos[0],pos[1])) 
-    vcount=vcount+1    
-    f.write("0\nSEQEND\n8\n"+layername+"\n5\n"+hex(vcount)[2:]+"\n")                             # finished writing a polyline
-    return vcount
-
-# def scanpolyline(poly):
-#     """scan a certain polyline and find some traits of it
-#     return a string indicated if polyline is on outline
-#     if 
-#     """
-#     for pos in poly:
-#         if (pos[0]-globalconfig.X_LENGTH/2)<0.01:
-#             return "poly_is_on_lwoutline" 
-#         if (pos[0]+globalconfig.X_LENGTH/2)<0.01:    
-#             return "poly_is_on_lwoutline" 
-#         if (pos[1]-globalconfig.Y_LENGTH/2)<0.01:
-#             return "poly_is_on_loutline"
-#         if (pos[1]-globalconfig.Y_LENGTH/2)<0.01:
-#             return 
-#         if 1:
-#             return "poly_is_on_corner"
-#     return "poly_is_noton_outline"
-
 
 
 ####1) Private (only for developpers)
@@ -1425,22 +1114,15 @@ def main():
     
     for e in layercolordict:
         feilin.layers.append(Layer(name=e,color=layercolordict[e]))
-    
-    
-    ringlist=[[[-0.215+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[0.215+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET]],
-              [[-0.215+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET],[0.215+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET]],
-              [[-0.215+globalconfig.CUTLINE_X_OFFSET,175.68+globalconfig.CUTLINE_Y_OFFSET],[0.215+globalconfig.CUTLINE_X_OFFSET,175.68+globalconfig.CUTLINE_Y_OFFSET]],
-              [[171.4650+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[171.8950+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET]],
-              [[171.4650+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET],[171.8950+globalconfig.CUTLINE_X_OFFSET,171.68+globalconfig.CUTLINE_Y_OFFSET]]]
-    
+     
     for feilin_layer in feilin_list:
-        for ring in ringlist:
-            feilin.append(PolyPad(points=ring,layer=feilin_layer,flag=1,width=0.1))      
+        for ring in buildringlist():
+            feilin.append(PolyPad(points=ring,layer=feilin_layer,flag=1,width=globalconfig.RING_WIDTH))      
         for cutline in buildcutlineset():
-            feilin.append(PolyLine(points=cutline,layer=feilin_layer,flag=1,width=0.08))
+            feilin.append(PolyLine(points=cutline,layer=feilin_layer,flag=1,width=globalconfig.CUTLINE_WIDTH))
         for flash in buildflashlist():
             feilin.append(Insert(layer=feilin_layer,name='cutlineendpoint',point=flash))
-        feilin.append(Text(layer=feilin_layer,text=globalconfig.NAME_OF_FEILIN+'-'+feilin_layer,point=(70.0+globalconfig.CUTLINE_X_OFFSET,185.0+globalconfig.CUTLINE_Y_OFFSET),height=2.5))
+        feilin.append(Text(layer=feilin_layer,text=globalconfig.NAME_OF_FEILIN+'-'+feilin_layer,point=(globalconfig.RING_DISTANCE/2-25.0+globalconfig.CUTLINE_X_OFFSET,8.0+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET),height=2.5))
        
     for d in dictlist:
         for e in d:                  #遍历字典
