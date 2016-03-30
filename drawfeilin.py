@@ -442,7 +442,10 @@ def outputholepos(dictlist,origindict): #dictlist-一行中所有图层的字典
         centerposlist.sort()
         holenotefile.write("通孔层    "+e+"    一共有通孔    "+'{:d}'.format(len(centerposlist))+"    个\n")    #输出每一通孔层的中心点数。即对应通孔数量
         for pos in centerposlist:
-            holeposfile.write('X{:.0f}Y{:.0f}\n'.format(pos[0]*1000,pos[1]*1000))                 #要格式化输出，所以先要乘以1000，然后输出小数点前的部分  
+            if globalconfig.FEILIN_INCH==6:
+                holeposfile.write('X{:07.3f}Y{:07.3f}\n'.format(pos[0],pos[1]))                 #要格式化输出，所以先要乘以1000，然后输出小数点前的部分  
+            else:
+                holeposfile.write('X{:.0f}Y{:.0f}\n'.format(pos[0]*1000,pos[1]*1000))
         holeposfile.close() 
     
 def calculatecenterpos(holepolylinelist):
@@ -455,8 +458,12 @@ def calculatecenterpos(holepolylinelist):
         for pos in poly:                            #通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
             center_pos_x=center_pos_x+pos[0]
             center_pos_y=center_pos_y+pos[1]
-        center_pos_x=center_pos_x/len(poly)-(globalconfig.CUTLINE_X_OFFSET+globalconfig.RING_DISTANCE/2)
-        center_pos_y=center_pos_y/len(poly)-(globalconfig.CUTLINE_Y_OFFSET+globalconfig.RING_DISTANCE/2)
+        if globalconfig.FEILIN_INCH==6:
+            center_pos_x=center_pos_x/len(poly)-globalconfig.CUTLINE_X_OFFSET
+            center_pos_y=center_pos_y/len(poly)-globalconfig.CUTLINE_Y_OFFSET
+        else:
+            center_pos_x=center_pos_x/len(poly)-(globalconfig.CUTLINE_X_OFFSET+globalconfig.RING_DISTANCE/2)
+            center_pos_y=center_pos_y/len(poly)-(globalconfig.CUTLINE_Y_OFFSET+globalconfig.RING_DISTANCE/2)
         center_pos_list.append([center_pos_x,center_pos_y])
     return center_pos_list
         
@@ -503,15 +510,6 @@ def outputinfo(d,x_ratiolist,y_ratiolist,eachrationumlist):
     info.write("\n阵列方式:请将以上图层图案向上阵列"+str(globalconfig.Y_ARRAY_NUM)+"行，行偏移为"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO,4))+"mm\n")
     info.close()    
       
-def feilininfo(feilin_list): 
-    """get string of feilin info
-    """
-    feilininfostr='\n\n菲林设计人:%s\n菲林设计时间:%s\n说明:需要 制作菲林的图层为%s\n阵列方式:请将以上图层图案向上阵列%s行，行偏移为'%\
-    (globalconfig.AUTHOR_NAME,time.strftime('%Y-%m-%d %X',time.localtime(time.time())),feilin_list,str(globalconfig.Y_ARRAY_NUM))\
-    +'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO,4))+'mm\n'
-   
-    return feilininfostr
-
 
 ####1) Private (only for developpers)
 _HEADER_POINTS=['insbase','extmin','extmax']
