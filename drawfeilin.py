@@ -21,8 +21,10 @@ class Globalconfig(object):
         #self.config.read(self.__class__.configfilename)
         self.config.readfp(codecs.open(self.__class__.configfilename, "r+b", "utf-8-sig"))
         
-        self.X_CENTER_RATIO=self.config.getfloat('DEFAULT',u'瓷体X方向收缩率')
-        self.Y_CENTER_RATIO=self.config.getfloat('DEFAULT',u'瓷体Y方向收缩率')
+        self.X_OUTLINE_RATIO=self.config.getfloat('DEFAULT',u'瓷体X方向收缩率')
+        self.Y_OUTLINE_RATIO=self.config.getfloat('DEFAULT',u'瓷体Y方向收缩率')
+        self.X_INNER_RATIO=self.config.getfloat('DEFAULT',u'内部图案X方向中心收缩率')
+        self.Y_INNER_RATIO=self.config.getfloat('DEFAULT',u'内部图案Y方向中心收缩率')
         self.RATIO_NUM=self.config.getint('DEFAULT',u'放缩率数量')
         self.X_RATIO_DIFF=self.config.getfloat('DEFAULT',u'X方向放缩率差值')
         self.Y_RATIO_DIFF=self.config.getfloat('DEFAULT',u'Y方向放缩率差值')
@@ -42,7 +44,15 @@ class Globalconfig(object):
         self.MARK_ROTATION_ANGLE=self.config.getint('DEFAULT',u'MARK旋转角度')
         self.MARK_X_OFFSET=self.config.getfloat('DEFAULT',u'MARK的X方向偏移')
         self.MARK_Y_OFFSET=self.config.getfloat('DEFAULT',u'MARK的Y方向偏移')
-        self.FEILIN_INCH=self.config.getint('DEFAULT',u'菲林英寸')      
+        self.FEILIN_INCH=self.config.getint('DEFAULT',u'菲林英寸')  
+        
+        if self.config.get('EXTRA',u'拼网列分割数')!=None:
+            self.BLOCK_X_NUM=self.config.getint('EXTRA',u'拼网列分割数')
+        if self.config.get('EXTRA',u'拼网行分割数')!=None:    
+            self.BLOCK_Y_NUM=self.config.getint('EXTRA',u'拼网行分割数')
+            
+        self.x_eachblock_num=self.X_ARRAY_NUM//self.BLOCK_X_NUM
+        self.y_eachblock_num=self.Y_ARRAY_NUM//self.BLOCK_Y_NUM
         
         if self.FEILIN_INCH==6:
             self.RING_DISTANCE=122.4
@@ -61,8 +71,8 @@ class Globalconfig(object):
         self.RING_WIDTH=0.1
         self.FIFTH_RING_OFFSET=4.0
         
-        self.X_BLANK=(self.RING_DISTANCE-self.X_LENGTH/self.X_CENTER_RATIO*self.X_ARRAY_NUM)/2
-        self.Y_BLANK=(self.RING_DISTANCE-self.Y_LENGTH/self.Y_CENTER_RATIO*self.Y_ARRAY_NUM)/2
+        self.X_BLANK=(self.RING_DISTANCE-self.X_LENGTH/self.X_OUTLINE_RATIO*self.X_ARRAY_NUM)/2
+        self.Y_BLANK=(self.RING_DISTANCE-self.Y_LENGTH/self.Y_OUTLINE_RATIO*self.Y_ARRAY_NUM)/2
 
 def buildcutlineset():
     """build cutline polyline set
@@ -89,11 +99,11 @@ def buildcutlineset():
             pos[1]=pos[1]+globalconfig.CUTLINE_Y_OFFSET
     
     for row in range(0,globalconfig.X_ARRAY_NUM+1):
-        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_Y_OFFSET]])
-        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET]])
     for line in range(0,globalconfig.Y_ARRAY_NUM+1):
-        cutlineset.append([[0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
-        cutlineset.append([[globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
+        cutlineset.append([[globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET],[globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET]])
     return cutlineset
 
 def buildflashlist():
@@ -122,15 +132,15 @@ def buildflashlist():
         flash[1]=flash[1]+globalconfig.CUTLINE_Y_OFFSET
     
     for row in range(0,globalconfig.X_ARRAY_NUM+1):
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,0.0+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.X_BLANK+row*(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET])
     for line in range(0,globalconfig.Y_ARRAY_NUM+1):
-        flashlist.append([0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
-        flashlist.append([globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([0.0+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([-globalconfig.CUTLINE_LENGTH+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
+        flashlist.append([globalconfig.CUTLINE_LENGTH+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.Y_BLANK+line*(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO)+globalconfig.CUTLINE_Y_OFFSET])
     return flashlist
 
 def buildringlist():
@@ -159,7 +169,7 @@ def buildmarkpointlist(eachrationumlist):
     for i in range(len(eachrationumlist)): 
         markpointlist=[]   
         for row in range(0,eachrationumlist[i]):
-            markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET])       
+            markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET])       
         markpointlistdict[marklist[i]]=markpointlist
     return markpointlistdict
     
@@ -167,17 +177,24 @@ def buildfilelist():
     """input nothing and return nothing
     """
     readfilelist=[]
+    dirdict={}
     #writefilelist=[]
     mypath=os.path.dirname(sys.argv[0])
     mypath=os.path.abspath(mypath)
     os.chdir(mypath)
-    filelist= os.listdir(mypath)
+
     
-    for onefile in filelist:
-        if os.path.splitext(onefile)[1]=='.dxf' and not (globalconfig.NAME_OF_FEILIN in unicode(os.path.splitext(onefile)[0],"gbk").encode('utf-8')):   #查找目录下的dxf文件，加入到readfilelist文件列表中 
-            readfilelist.append(onefile)
+    for item in os.listdir(mypath):
+        filepath=os.path.join(mypath,item)
+        if os.path.isdir(filepath) and item.isdigit():          
+            for onefile in os.listdir(filepath):
+                filepath2=os.path.join(filepath,onefile)
+                if os.path.splitext(onefile)[1]=='.dxf':   #查找目录下的dxf文件，加入到readfilelist文件列表中 
+                    readfilelist.append(filepath2)          
+            dirdict[int(item)]=readfilelist                  #dirlist是字典，key是文件夹的名称，value是文件夹中dxf文件列表
     #feilin=file('feilin(ph).dxf','w')                 #新建一个文件，名字先占位用，后续改成由配置文件中读入名称。 
-    return readfilelist
+    
+    return dirdict
     
 def extractpolylinefromdxf(readfilelist):
     """extract all polyline from a R12 format dxf file and store them by a list of (vortex list)=polyline 
@@ -186,7 +203,7 @@ def extractpolylinefromdxf(readfilelist):
     d={}
     for readfile in readfilelist:                    #将readfilelist中的文件逐个按照程序进行读取分析
         filetoread=file(readfile,'r')
-        layername=filetoread.name.split(".")[0]
+        layername=filetoread.name.split(".")[0].split("\\")[-1]
         #newfilename=filetoread.name.split('.')[0]+'.txt'
         #readme.write(newfilename)
         #filetowrite=file(newfilename,'w')
@@ -246,17 +263,24 @@ def extractpolylinefromdxf(readfilelist):
     d["Outline"]=[[[globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2],[globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2]]]
     return d
   
-def polylinedictarraycopy(d):#d——原始图层多段线字典
+def polylinedictarraycopy(d,blockcount):#d——原始图层多段线字典
     """input a polyline dict and array them by row
     """  
     dictlist=[]
     x_ratiolist=[] #放缩率列表
-    y_ratiolist=[]
+    y_ratiolist=[]  
     rationumaccumulationlist=[]          #放缩率数量累加列表
     
-    eachrationum=globalconfig.X_ARRAY_NUM//globalconfig.RATIO_NUM
-    leftrationum=globalconfig.X_ARRAY_NUM%globalconfig.RATIO_NUM
+    block_x_count=blockcount%globalconfig.BLOCK_X_NUM
+    block_y_count=blockcount//globalconfig.BLOCK_X_NUM
     
+    eachrationum=globalconfig.x_eachblock_num//globalconfig.RATIO_NUM
+    leftrationum=globalconfig.x_eachblock_num%globalconfig.RATIO_NUM
+    
+    #区块的原点偏移量（相对于outline左下角）
+    block_x_offset=globalconfig.x_eachblock_num*block_x_count*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO
+    block_y_offset=globalconfig.y_eachblock_num*block_y_count*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO
+     
     eachrationumlist=[eachrationum]*globalconfig.RATIO_NUM          #各个放缩率对应数量的列表
     
     for i in range((globalconfig.RATIO_NUM-1)//2-(leftrationum-1)//2,(globalconfig.RATIO_NUM-1)//2-(leftrationum-1)//2+leftrationum):
@@ -268,15 +292,14 @@ def polylinedictarraycopy(d):#d——原始图层多段线字典
         rationumaccumulationlist.append(rationumaccumulationlist[i-1]+eachrationumlist[i-1])
     
     for i in range(0,globalconfig.RATIO_NUM):            #计算放缩率列表
-        x_ratiolist.append((globalconfig.X_CENTER_RATIO-((globalconfig.RATIO_NUM+1)//2-1)*globalconfig.X_RATIO_DIFF)+i*globalconfig.X_RATIO_DIFF) 
-        y_ratiolist.append((globalconfig.Y_CENTER_RATIO-((globalconfig.RATIO_NUM+1)//2-1)*globalconfig.Y_RATIO_DIFF)+i*globalconfig.Y_RATIO_DIFF)   
+        x_ratiolist.append((globalconfig.X_INNER_RATIO-((globalconfig.RATIO_NUM+1)//2-1)*globalconfig.X_RATIO_DIFF)+i*globalconfig.X_RATIO_DIFF) 
+        y_ratiolist.append((globalconfig.Y_INNER_RATIO-((globalconfig.RATIO_NUM+1)//2-1)*globalconfig.Y_RATIO_DIFF)+i*globalconfig.Y_RATIO_DIFF)   
        
     for i in range(0,globalconfig.RATIO_NUM):        #每种放缩率
         for j in range(0,eachrationumlist[i]):      #每种放缩率对应数量
             newdict={}
             for e in d:                     #将字典中值即每一图层对应的多段线列表进行复制并移动到指定位置
-                newdict[e]=polylinedatasetarraycopy(d[e],x_ratiolist[i],y_ratiolist[i],globalconfig.CUTLINE_X_OFFSET+globalconfig.X_BLANK+(rationumaccumulationlist[i]+j+0.5)*globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO,globalconfig.CUTLINE_Y_OFFSET+globalconfig.Y_BLANK+0.5*globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO,e,len(dictlist))                     
-                #newdict.append([e,polylinedatasetarraycopy(d[e],ratiolist[i],globalconfig.CUTLINE_X_OFFSET+globalconfig.X_BLANK+(rationumaccumulationlist[i]+j+0.5)*globalconfig.X_LENGTH/globalconfig.CENTER_RATIO,globalconfig.CUTLINE_Y_OFFSET+globalconfig.Y_BLANK+0.5*globalconfig.Y_LENGTH/globalconfig.CENTER_RATIO,e,len(dictlist))])
+                newdict[e]=polylinedatasetarraycopy(d[e],x_ratiolist[i],y_ratiolist[i],globalconfig.CUTLINE_X_OFFSET+globalconfig.X_BLANK+(rationumaccumulationlist[i]+j+0.5)*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO+block_x_offset,globalconfig.CUTLINE_Y_OFFSET+globalconfig.Y_BLANK+0.5*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO+block_y_offset,e,len(dictlist))                     
             dictlist.append(newdict)  
     return (dictlist,x_ratiolist,y_ratiolist,eachrationumlist)
 
@@ -288,21 +311,21 @@ def holepolylinedictarraycopy(holepolylinedict):
     for e in holepolylinedict:              #对通孔图层多段线字典进行遍历，将里面的多段线向上阵列
         holepolylinedataset=[]
         for row in range(0,globalconfig.Y_ARRAY_NUM):           
-            holepolylinedataset.extend(datasetjustcopy(holepolylinedict[e], 1,1, 0, globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO*row))
+            holepolylinedataset.extend(datasetjustcopy(holepolylinedict[e], 1,1, 0, globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO*row))
         holepolylinearraydict[e]=holepolylinedataset
     return holepolylinearraydict
   
-def polylinedatasetarraycopy(l,x_ratio,y_ratio,x_offset,y_offset,layername,arraycount):
+def polylinedatasetarraycopy(l,x_ratio,y_ratio,x_offset,y_offset,layername,arraycount):#l-多段线列表  x_ratio-x方向放缩率 y_ratio-y方向放缩率 x_offset-x方向偏移 y_offset-y方向偏移 layername-图层名称 arraycount-数数位置计数，判断是否在边缘？
     """copy a polyline dataset and enlarged by a certain ratio
     """ 
     if layername in globalconfig.JUSTCOPYLIST:                      #根据图层名称判断是按中心放缩率直接放大后复制还是按多种放缩率放大后做边上的点的延伸或者不延伸的操作
-        dataset=datasetjustcopy(l,globalconfig.X_CENTER_RATIO,globalconfig.Y_CENTER_RATIO,x_offset,y_offset)
+        dataset=datasetjustcopy(l,globalconfig.X_OUTLINE_RATIO,globalconfig.Y_OUTLINE_RATIO,x_offset,y_offset)
     elif layername in globalconfig.EXTENDCOPYLIST:
         dataset=datasetratiocopy_extend(l,x_ratio,y_ratio,x_offset,y_offset)
     else:
         if arraycount==0:                               #判断是最左边的图案
             dataset=datasetratiocopy_xl_extend(l,x_ratio,y_ratio,x_offset,y_offset)
-        elif arraycount==globalconfig.X_ARRAY_NUM-1:                 #判断是最右边的图案
+        elif arraycount==globalconfig.x_eachblock_num-1:                 #判断是最右边的图案
             dataset=datasetratiocopy_xr_extend(l,x_ratio,y_ratio,x_offset,y_offset)
         else:                                           #判断是中间的图案  
             dataset=datasetratiocopy_notextend(l,x_ratio,y_ratio,x_offset,y_offset)
@@ -330,13 +353,13 @@ def datasetratiocopy_xl_extend(l,x_ratio,y_ratio,x_offset,y_offset):#只延伸�
             pos_y=pos[1]
             if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01:
                 if pos_x<0:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
-                    pos_x=pos[0]/globalconfig.X_CENTER_RATIO+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)+x_offset
+                    pos_x=pos[0]/globalconfig.X_OUTLINE_RATIO+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)+x_offset
                 else:
-                    pos_x=pos[0]/globalconfig.X_CENTER_RATIO+x_offset                 
+                    pos_x=pos[0]/globalconfig.X_OUTLINE_RATIO+x_offset                 
             else:
                 pos_x=pos[0]/x_ratio+x_offset
             if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:
-                pos_y=pos[1]/globalconfig.Y_CENTER_RATIO+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)+y_offset
+                pos_y=pos[1]/globalconfig.Y_OUTLINE_RATIO+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)+y_offset
             else:
                 pos_y=pos[1]/y_ratio+y_offset                              
             newpolyline.append([pos_x,pos_y])
@@ -354,13 +377,13 @@ def datasetratiocopy_xr_extend(l,x_ratio,y_ratio,x_offset,y_offset):#只延伸�
             pos_y=pos[1]
             if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01: 
                 if pos_x>0:                                         #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
-                    pos_x=pos[0]/globalconfig.X_CENTER_RATIO+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)+x_offset
+                    pos_x=pos[0]/globalconfig.X_OUTLINE_RATIO+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)+x_offset
                 else:
-                    pos_x=pos[0]/globalconfig.X_CENTER_RATIO+x_offset               
+                    pos_x=pos[0]/globalconfig.X_OUTLINE_RATIO+x_offset               
             else:
                 pos_x=pos[0]/x_ratio+x_offset
             if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:
-                pos_y=pos[1]/globalconfig.Y_CENTER_RATIO+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)+y_offset
+                pos_y=pos[1]/globalconfig.Y_OUTLINE_RATIO+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)+y_offset
             else:
                 pos_y=pos[1]/y_ratio+y_offset                              
             newpolyline.append([pos_x,pos_y])
@@ -377,11 +400,11 @@ def datasetratiocopy_extend(l,x_ratio,y_ratio,x_offset,y_offset):#全部四边�
             pos_x=pos[0]
             pos_y=pos[1]
             if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
-                pos_x=pos[0]/globalconfig.X_CENTER_RATIO+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)+x_offset               
+                pos_x=pos[0]/globalconfig.X_OUTLINE_RATIO+(abs(pos_x)/pos_x*globalconfig.X_EXTENDED_LENGTH)+x_offset               
             else:
                 pos_x=pos[0]/x_ratio+x_offset
             if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:
-                pos_y=pos[1]/globalconfig.Y_CENTER_RATIO+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)+y_offset
+                pos_y=pos[1]/globalconfig.Y_OUTLINE_RATIO+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)+y_offset
             else:
                 pos_y=pos[1]/y_ratio+y_offset                              
             newpolyline.append([pos_x,pos_y])
@@ -399,11 +422,11 @@ def datasetratiocopy_notextend(l,x_ratio,y_ratio,x_offset,y_offset):#虽然说�
             pos_x=pos[0]
             pos_y=pos[1]
             if abs((abs(pos_x)-globalconfig.X_LENGTH/2))<0.01:                                          #judge if the pos is on the origin outline,if on outline,will be moved to the new enlarged outline and plus an extene length
-                pos_x=pos[0]/globalconfig.X_CENTER_RATIO+x_offset               
+                pos_x=pos[0]/globalconfig.X_OUTLINE_RATIO+x_offset               
             else:
                 pos_x=pos[0]/x_ratio+x_offset
             if abs((abs(pos_y)-globalconfig.Y_LENGTH/2))<0.01:
-                pos_y=pos[1]/globalconfig.Y_CENTER_RATIO+y_offset+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)          #虽然说是不延伸，但是上下两边上的点Y方向还是会延伸的。
+                pos_y=pos[1]/globalconfig.Y_OUTLINE_RATIO+y_offset+(abs(pos_y)/pos_y*globalconfig.Y_EXTENDED_LENGTH)          #虽然说是不延伸，但是上下两边上的点Y方向还是会延伸的。
             else:
                 pos_y=pos[1]/y_ratio+y_offset                              
             newpolyline.append([pos_x,pos_y])
@@ -485,20 +508,20 @@ def outputinfo(d,x_ratiolist,y_ratiolist,eachrationumlist):
     info.write("转化时间:    "+time.strftime('%Y-%m-%d %A %X',time.localtime(time.time()))+"\n")
     info.write("转化人:     "+globalconfig.AUTHOR_NAME+"\n")
     for i in range(0,globalconfig.RATIO_NUM):
-        info.write("放缩方案"+str(i+1)+"——x方向放缩率为    "+'{:.2f}'.format(round(x_ratiolist[i],2))+"    y方向放缩率为    "+'{:.2f}'.format(round(y_ratiolist[i],2))+"    对应1bar方案数有    "+str(eachrationumlist[i]*globalconfig.Y_ARRAY_NUM)+"\n")
+        info.write("放缩方案"+str(i+1)+"——x方向放缩率为    "+'{:.3f}'.format(round(x_ratiolist[i],3))+"    y方向放缩率为    "+'{:.3f}'.format(round(y_ratiolist[i],3))+"    对应1bar方案数有    "+str(eachrationumlist[i]*globalconfig.Y_ARRAY_NUM)+"\n")
     
     #info.write("放缩方案 : "+str(ratiolist)+"\n")
     #info.write("每个放缩率一行对应数量 : "+str(eachrationumlist)+"\n")
-    info.write("瓷体X方向对应放缩率: "+str(globalconfig.X_CENTER_RATIO)+"    瓷体Y方向对应放缩率: "+str(globalconfig.Y_CENTER_RATIO)+"\n")
+    info.write("瓷体X方向对应放缩率: "+str(globalconfig.X_OUTLINE_RATIO)+"    瓷体Y方向对应放缩率: "+str(globalconfig.Y_OUTLINE_RATIO)+"\n")
     
     info.write("丝网排列情况: \n")
-    info.write("列     "+str(globalconfig.X_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO,4))+"mm\n")
-    info.write("行     "+str(globalconfig.Y_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO,4))+"mm\n")
+    info.write("列     "+str(globalconfig.X_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO,4))+"mm\n")
+    info.write("行     "+str(globalconfig.Y_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO,4))+"mm\n")
     
     info.write("\n\n"+globalconfig.NAME_OF_FEILIN+"菲林检验标准\n")
     info.write("菲林切割线长度检验标准\n")
-    info.write("X方向切割线总长度:    "+'{:.4f}'.format(round(globalconfig.X_LENGTH/globalconfig.X_CENTER_RATIO*globalconfig.X_ARRAY_NUM,4))+"mm\n")
-    info.write("Y方向切割线总长度:    "+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO*globalconfig.Y_ARRAY_NUM,4))+"mm\n")
+    info.write("X方向切割线总长度:    "+'{:.4f}'.format(round(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO*globalconfig.X_ARRAY_NUM,4))+"mm\n")
+    info.write("Y方向切割线总长度:    "+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO*globalconfig.Y_ARRAY_NUM,4))+"mm\n")
     #info.write("说明:通孔的图层为"+str(hole_list)+"\n")
     
     
@@ -507,7 +530,7 @@ def outputinfo(d,x_ratiolist,y_ratiolist,eachrationumlist):
     info.write("说明:需要制作菲林的图层为")
     for feilin in feilin_list:
         info.write(feilin+" ")
-    info.write("\n阵列方式:请将以上图层图案向上阵列"+str(globalconfig.Y_ARRAY_NUM)+"行，行偏移为"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_CENTER_RATIO,4))+"mm\n")
+    info.write("\n阵列方式:请将以上图层图案向上阵列"+str(globalconfig.Y_ARRAY_NUM)+"行，行偏移为"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO,4))+"mm\n")
     info.close()    
       
 
@@ -1087,10 +1110,28 @@ def main():
     feilin.views.append(View('Normal'))          #table view
     #feilin.views.append(ViewByWindow('Window',leftBottom=(1,0),rightTop=(2,1)))  #idem
     
-    readfilelist=buildfilelist()
-    polylinedatasetdict=extractpolylinefromdxf(readfilelist)   
-    (dictlist,x_ratiolist,y_ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict)
+    #绘制菲林内部图案  
+    dirdict=buildfilelist()
+    blocknum=len(dirdict)   
+    if blocknum!=globalconfig.BLOCK_Y_NUM*globalconfig.BLOCK_X_NUM:
+        return 0
     
+    blockseqlist=dirdict.keys()
+    
+    if len(blockseqlist)>1:
+        blockseqlist.sort()
+   
+    for blockcount,blockname in enumerate(blockseqlist):
+        readfilelist=dirdict[blockname]    
+        polylinedatasetdict=extractpolylinefromdxf(readfilelist)   
+        (dictlist,x_ratiolist,y_ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict,blockcount)   
+        for d in dictlist:
+            for e in d:                  #遍历字典
+                for polyline in d[e]:       #遍历字典值，即多段线列表
+                    feilin.append(PolyLine(points=polyline,layer=e,flag=1))
+    
+       
+    #分菲林 以及通孔，然后给菲林图层上色
     layernamelist=list(polylinedatasetdict.viewkeys())
     layernamelist.append("Cutline")   #这里会包括Cutline以及其他除通孔层的图层
     hole_list=[]
@@ -1109,10 +1150,13 @@ def main():
     layercolordict["Outline"]=1
     layercolordict["Mark"]=5
     layercolordict["Cutline"]=2
+    #分菲林 以及通孔，然后给菲林图层上色
     
+    #添加图层 
     for e in layercolordict:
         feilin.layers.append(Layer(name=e,color=layercolordict[e]))
      
+    #绘制切割线
     for feilin_layer in feilin_list:
         for ring in buildringlist():
             feilin.append(PolyPad(points=ring,layer=feilin_layer,flag=1,width=globalconfig.RING_WIDTH))      
@@ -1122,18 +1166,19 @@ def main():
             feilin.append(Insert(layer=feilin_layer,name='cutlineendpoint',point=flash))
         feilin.append(Text(layer=feilin_layer,text=globalconfig.NAME_OF_FEILIN+'-'+feilin_layer,point=(globalconfig.RING_DISTANCE/2-25.0+globalconfig.CUTLINE_X_OFFSET,8.0+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET),height=2.5))
        
-    for d in dictlist:
-        for e in d:                  #遍历字典
-            for polyline in d[e]:       #遍历字典值，即多段线列表
-                feilin.append(PolyLine(points=polyline,layer=e,flag=1))
-
+    
+    
+    #绘制MARK
     markpointlistdict=buildmarkpointlist(eachrationumlist)
     for mark in markpointlistdict: 
         for markpoint in markpointlistdict[mark]:
-            feilin.append(Text(layer='Mark',text=mark,point=markpoint,height=1.0,rotation=globalconfig.MARK_ROTATION_ANGLE))  
-                    
-    feilin.saveas(globalconfig.NAME_OF_FEILIN+u'(总菲林)'+'.dxf')   
+            feilin.append(Text(layer='M',text=mark,point=markpoint,height=1.0,rotation=globalconfig.MARK_ROTATION_ANGLE))  
+    
+    #绘制所有菲林图案                
+    feilin.saveas(globalconfig.NAME_OF_FEILIN+u'(总菲林)'+'.dxf')
+    #输出菲林信息文件 
     outputinfo(polylinedatasetdict,x_ratiolist,y_ratiolist,eachrationumlist)
+    #输出菲林通孔坐标文件
     outputholepos(dictlist,polylinedatasetdict)
 
 if __name__=='__main__':
