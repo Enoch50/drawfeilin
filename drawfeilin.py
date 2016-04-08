@@ -36,7 +36,6 @@ class Globalconfig(object):
         self.Y_EXTENDED_LENGTH=self.config.getfloat('DEFAULT',u'引出端y方向延伸距离')
         self.CUTLINE_X_OFFSET=self.config.getfloat('DEFAULT',u'切割线x方向偏移距离')
         self.CUTLINE_Y_OFFSET=self.config.getfloat('DEFAULT',u'切割线y方向偏移距离')
-        #self.RING_DISTANCE=self.config.getfloat('DEFAULT',u'定位圆环中心距')
         self.NAME_OF_FEILIN=self.config.get('DEFAULT',u'菲林名称').encode('utf-8')
         self.JUSTCOPYLIST=tuple(self.config.get('DEFAULT',u'不做多种放缩的图层').encode('utf-8').split('|'))
         self.EXTENDCOPYLIST=tuple(self.config.get('DEFAULT',u'需要做xy方向延伸的图层').encode('utf-8').split('|'))
@@ -44,15 +43,39 @@ class Globalconfig(object):
         self.MARK_ROTATION_ANGLE=self.config.getint('DEFAULT',u'MARK旋转角度')
         self.MARK_X_OFFSET=self.config.getfloat('DEFAULT',u'MARK的X方向偏移')
         self.MARK_Y_OFFSET=self.config.getfloat('DEFAULT',u'MARK的Y方向偏移')
-        self.FEILIN_INCH=self.config.getint('DEFAULT',u'菲林英寸')  
+        self.FEILIN_INCH=self.config.getint('DEFAULT',u'菲林英寸')
+        self.MARK_HEIGHT=self.config.getfloat('DEFAULT',u'MARK文字高度')
+        
         
         if self.config.get('EXTRA',u'拼网列分割数')!=None:
             self.BLOCK_X_NUM=self.config.getint('EXTRA',u'拼网列分割数')
         if self.config.get('EXTRA',u'拼网行分割数')!=None:    
             self.BLOCK_Y_NUM=self.config.getint('EXTRA',u'拼网行分割数')
             
-        self.x_eachblock_num=self.X_ARRAY_NUM//self.BLOCK_X_NUM
-        self.y_eachblock_num=self.Y_ARRAY_NUM//self.BLOCK_Y_NUM
+ 
+        self.block_x_accumulationlist=[0]
+        self.block_y_accumulationlist=[0]
+        
+        self.each_xblock_num=self.X_ARRAY_NUM//self.BLOCK_X_NUM
+        self.leftblock_x_num=self.X_ARRAY_NUM%self.BLOCK_X_NUM
+        
+        self.each_yblock_num=self.Y_ARRAY_NUM//self.BLOCK_Y_NUM
+        self.leftblock_y_num=self.Y_ARRAY_NUM%self.BLOCK_Y_NUM
+        
+        self.eachblock_x_list=[self.each_xblock_num]*self.BLOCK_X_NUM
+        self.eachblock_y_list=[self.each_yblock_num]*self.BLOCK_Y_NUM
+        
+        for i in range(self.BLOCK_X_NUM-self.leftblock_x_num,self.BLOCK_X_NUM):
+            self.eachblock_x_list[i]=self.eachblock_x_list[i]+1
+            
+        for i in range(self.BLOCK_Y_NUM-self.leftblock_y_num,self.BLOCK_Y_NUM):
+            self.eachblock_y_list[i]=self.eachblock_y_list[i]+1
+            
+        for i in range(1,self.BLOCK_X_NUM):
+            self.block_x_accumulationlist.append(self.block_x_accumulationlist[i-1]+self.eachblock_x_list[i-1])
+            
+        for i in range(1,self.BLOCK_Y_NUM):
+            self.block_y_accumulationlist.append(self.block_y_accumulationlist[i-1]+self.eachblock_y_list[i-1])
         
         if self.FEILIN_INCH==6:
             self.RING_DISTANCE=122.4
@@ -154,23 +177,33 @@ def buildringlist():
     
     return ringlist
 
-def buildmarkpointlist(eachrationumlist):
+def buildmarkpointlist(eachrationumlist,blockcount):
     """build mark point list
     """
     
     markpointlistdict={}
-    marklist=['A','B','C','D','E','F','G','H','I','J','K']
+    markratiolist=['A','B','C','D','E','F','G','H','I','J','K']
+    blockmark_x_list=['A','B','C','D','E','F','G','H','I','J','K']
+    blockmark_y_list=['1','2','3','4','5','6','7','8','9']
     markpointlist=[]
     rationumaccumulationlist=[]
     rationumaccumulationlist.append(0)   
     for i in range(1,globalconfig.RATIO_NUM):         #计算放缩率数量累加列表
         rationumaccumulationlist.append(rationumaccumulationlist[i-1]+eachrationumlist[i-1])
         
+
+        
+    block_x_count=blockcount%globalconfig.BLOCK_X_NUM
+    block_y_count=blockcount//globalconfig.BLOCK_Y_NUM
+    
+    block_x_offset=globalconfig.block_x_accumulationlist[block_x_count]*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO
+    block_y_offset=globalconfig.block_y_accumulationlist[block_y_count]*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO
+        
     for i in range(len(eachrationumlist)): 
         markpointlist=[]   
         for row in range(0,eachrationumlist[i]):
-            markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET])       
-        markpointlistdict[marklist[i]]=markpointlist
+            markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET+block_x_offset,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET+block_y_offset])       
+        markpointlistdict[blockmark_x_list[block_x_count]+blockmark_y_list[block_y_count]+'-'+markratiolist[i]]=markpointlist
     return markpointlistdict
     
 def buildfilelist():
@@ -272,15 +305,19 @@ def polylinedictarraycopy(d,blockcount):#d——原始图层多段线字典
     rationumaccumulationlist=[]          #放缩率数量累加列表
     
     block_x_count=blockcount%globalconfig.BLOCK_X_NUM
-    block_y_count=blockcount//globalconfig.BLOCK_X_NUM
-    
-    eachrationum=globalconfig.x_eachblock_num//globalconfig.RATIO_NUM
-    leftrationum=globalconfig.x_eachblock_num%globalconfig.RATIO_NUM
-    
+    block_y_count=blockcount//globalconfig.BLOCK_Y_NUM
+       
     #区块的原点偏移量（相对于outline左下角）
-    block_x_offset=globalconfig.x_eachblock_num*block_x_count*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO
-    block_y_offset=globalconfig.y_eachblock_num*block_y_count*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO
-     
+    block_x_offset=globalconfig.block_x_accumulationlist[block_x_count]*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO
+    block_y_offset=globalconfig.block_y_accumulationlist[block_y_count]*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO
+    
+    
+    eachrationum=globalconfig.eachblock_x_list[block_x_count]//globalconfig.RATIO_NUM
+    leftrationum=globalconfig.eachblock_x_list[block_x_count]%globalconfig.RATIO_NUM
+    
+    if eachrationum==0:
+        print("eachrationum==0,please reduce ratio num!");
+    
     eachrationumlist=[eachrationum]*globalconfig.RATIO_NUM          #各个放缩率对应数量的列表
     
     for i in range((globalconfig.RATIO_NUM-1)//2-(leftrationum-1)//2,(globalconfig.RATIO_NUM-1)//2-(leftrationum-1)//2+leftrationum):
@@ -299,7 +336,7 @@ def polylinedictarraycopy(d,blockcount):#d——原始图层多段线字典
         for j in range(0,eachrationumlist[i]):      #每种放缩率对应数量
             newdict={}
             for e in d:                     #将字典中值即每一图层对应的多段线列表进行复制并移动到指定位置
-                newdict[e]=polylinedatasetarraycopy(d[e],x_ratiolist[i],y_ratiolist[i],globalconfig.CUTLINE_X_OFFSET+globalconfig.X_BLANK+(rationumaccumulationlist[i]+j+0.5)*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO+block_x_offset,globalconfig.CUTLINE_Y_OFFSET+globalconfig.Y_BLANK+0.5*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO+block_y_offset,e,len(dictlist))                     
+                newdict[e]=polylinedatasetarraycopy(d[e],x_ratiolist[i],y_ratiolist[i],globalconfig.CUTLINE_X_OFFSET+globalconfig.X_BLANK+(rationumaccumulationlist[i]+j+0.5)*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO+block_x_offset,globalconfig.CUTLINE_Y_OFFSET+globalconfig.Y_BLANK+0.5*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO+block_y_offset,e,len(dictlist),globalconfig.eachblock_x_list[block_x_count])                     
             dictlist.append(newdict)  
     return (dictlist,x_ratiolist,y_ratiolist,eachrationumlist)
 
@@ -315,7 +352,7 @@ def holepolylinedictarraycopy(holepolylinedict):
         holepolylinearraydict[e]=holepolylinedataset
     return holepolylinearraydict
   
-def polylinedatasetarraycopy(l,x_ratio,y_ratio,x_offset,y_offset,layername,arraycount):#l-多段线列表  x_ratio-x方向放缩率 y_ratio-y方向放缩率 x_offset-x方向偏移 y_offset-y方向偏移 layername-图层名称 arraycount-数数位置计数，判断是否在边缘？
+def polylinedatasetarraycopy(l,x_ratio,y_ratio,x_offset,y_offset,layername,arraycount,arraylength):#l-多段线列表  x_ratio-x方向放缩率 y_ratio-y方向放缩率 x_offset-x方向偏移 y_offset-y方向偏移 layername-图层名称 arraycount-数数位置计数，判断是否在边缘？
     """copy a polyline dataset and enlarged by a certain ratio
     """ 
     if layername in globalconfig.JUSTCOPYLIST:                      #根据图层名称判断是按中心放缩率直接放大后复制还是按多种放缩率放大后做边上的点的延伸或者不延伸的操作
@@ -325,7 +362,7 @@ def polylinedatasetarraycopy(l,x_ratio,y_ratio,x_offset,y_offset,layername,array
     else:
         if arraycount==0:                               #判断是最左边的图案
             dataset=datasetratiocopy_xl_extend(l,x_ratio,y_ratio,x_offset,y_offset)
-        elif arraycount==globalconfig.x_eachblock_num-1:                 #判断是最右边的图案
+        elif arraycount==arraylength-1:                 #判断是最右边的图案
             dataset=datasetratiocopy_xr_extend(l,x_ratio,y_ratio,x_offset,y_offset)
         else:                                           #判断是中间的图案  
             dataset=datasetratiocopy_notextend(l,x_ratio,y_ratio,x_offset,y_offset)
@@ -1113,7 +1150,12 @@ def main():
     #绘制菲林内部图案  
     dirdict=buildfilelist()
     blocknum=len(dirdict)   
+    
+    #一个初略的输入检查
     if blocknum!=globalconfig.BLOCK_Y_NUM*globalconfig.BLOCK_X_NUM:
+        return 0
+    
+    if globalconfig.MARK_HEIGHT<0.75:
         return 0
     
     blockseqlist=dirdict.keys()
@@ -1121,7 +1163,7 @@ def main():
     if len(blockseqlist)>1:
         blockseqlist.sort()
    
-    for blockcount,blockname in enumerate(blockseqlist):
+    for blockcount,blockname in enumerate(blockseqlist):#blockcount-第几个区块？ blockname-区块名称，就是目录名
         readfilelist=dirdict[blockname]    
         polylinedatasetdict=extractpolylinefromdxf(readfilelist)   
         (dictlist,x_ratiolist,y_ratiolist,eachrationumlist)=polylinedictarraycopy(polylinedatasetdict,blockcount)   
@@ -1129,6 +1171,11 @@ def main():
             for e in d:                  #遍历字典
                 for polyline in d[e]:       #遍历字典值，即多段线列表
                     feilin.append(PolyLine(points=polyline,layer=e,flag=1))
+        #绘制MARK
+        markpointlistdict=buildmarkpointlist(eachrationumlist,blockcount)
+        for mark in markpointlistdict: 
+            for markpoint in markpointlistdict[mark]:
+                feilin.append(Text(layer='M',text=mark,point=markpoint,height=globalconfig.MARK_HEIGHT,rotation=globalconfig.MARK_ROTATION_ANGLE))  
     
        
     #分菲林 以及通孔，然后给菲林图层上色
@@ -1166,13 +1213,6 @@ def main():
             feilin.append(Insert(layer=feilin_layer,name='cutlineendpoint',point=flash))
         feilin.append(Text(layer=feilin_layer,text=globalconfig.NAME_OF_FEILIN+'-'+feilin_layer,point=(globalconfig.RING_DISTANCE/2-25.0+globalconfig.CUTLINE_X_OFFSET,8.0+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET),height=2.5))
        
-    
-    
-    #绘制MARK
-    markpointlistdict=buildmarkpointlist(eachrationumlist)
-    for mark in markpointlistdict: 
-        for markpoint in markpointlistdict[mark]:
-            feilin.append(Text(layer='M',text=mark,point=markpoint,height=1.0,rotation=globalconfig.MARK_ROTATION_ANGLE))  
     
     #绘制所有菲林图案                
     feilin.saveas(globalconfig.NAME_OF_FEILIN+u'(总菲林)'+'.dxf')
