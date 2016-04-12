@@ -44,7 +44,9 @@ class Globalconfig(object):
         self.MARK_Y_OFFSET=self.config.getfloat('DEFAULT',u'MARK的Y方向偏移')
         self.FEILIN_INCH=self.config.getint('DEFAULT',u'菲林英寸')
         self.MARK_HEIGHT=self.config.getfloat('DEFAULT',u'MARK文字高度')
-        
+        self.markratiolist=tuple(self.config.get('DEFAULT',u'表示放缩率的MARK标识').encode('utf-8').split('|'))   
+        self.blockmark_x_list=tuple(self.config.get('DEFAULT',u'拼网区块x方向MARK标识').encode('utf-8').split('|'))   
+        self.blockmark_y_list=tuple(self.config.get('DEFAULT',u'拼网区块y方向MARK标识').encode('utf-8').split('|'))   
         
         if self.config.get('EXTRA',u'拼网列分割数')!=None:
             self.BLOCK_X_NUM=self.config.getint('EXTRA',u'拼网列分割数')
@@ -465,28 +467,33 @@ def buildmarkpointlist(eachrationumlist,blockcount):
     """
     
     markpointlistdict={}
-    markratiolist=['A','B','C','D','E','F','G','H','I','J','K']
-    blockmark_x_list=['A','B','C','D','E','F','G','H','I','J','K']
-    blockmark_y_list=['1','2','3','4','5','6','7','8','9']
+  
     markpointlist=[]
     rationumaccumulationlist=[]
     rationumaccumulationlist.append(0)   
     for i in range(1,globalconfig.RATIO_NUM):         #计算放缩率数量累加列表
         rationumaccumulationlist.append(rationumaccumulationlist[i-1]+eachrationumlist[i-1])
-        
-
-        
+          
     block_x_count=blockcount%globalconfig.BLOCK_X_NUM
     block_y_count=blockcount//globalconfig.BLOCK_X_NUM
     
     block_x_offset=globalconfig.block_x_accumulationlist[block_x_count]*globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO
     block_y_offset=globalconfig.block_y_accumulationlist[block_y_count]*globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO
+    
+    
+    
         
     for i in range(len(eachrationumlist)): 
         markpointlist=[]   
         for row in range(0,eachrationumlist[i]):
-            markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET+block_x_offset,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET+block_y_offset])       
-        markpointlistdict[blockmark_x_list[block_x_count]+blockmark_y_list[block_y_count]+'-'+markratiolist[i]]=markpointlist
+            markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET+block_x_offset,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET+block_y_offset])
+            
+        if globalconfig.BLOCK_X_NUM==1: 
+            mark=globalconfig.blockmark_y_list[block_y_count]+globalconfig.markratiolist[i]      
+        elif globalconfig.BLOCK_Y_NUM==1:
+            mark=globalconfig.blockmark_x_list[block_x_count]+globalconfig.markratiolist[i] 
+            
+        markpointlistdict[mark]=markpointlist
     return markpointlistdict
     
 def buildfilelist():
