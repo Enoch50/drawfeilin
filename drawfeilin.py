@@ -54,12 +54,16 @@ class Globalconfig(object):
             self.BLOCK_Y_NUM=self.config.getint('EXTRA',u'拼网行分割数')
         
         self.EXTENDCOPYLIST=[]
+        self.layerholepairdictlist=[]
+        
         for i in range(0,self.BLOCK_X_NUM*self.BLOCK_Y_NUM):
             self.EXTENDCOPYLIST.append(tuple(self.config.get(str(i+1),u'需要做xy方向延伸的图层').encode('utf-8').split('|')))
-        
-        
-        
-            
+            pairlist=tuple(self.config.get(str(i+1),u'图层与通孔配对').encode('utf-8').split(','))          
+            newpairdict={}    
+            for pair in pairlist:
+                key,value=pair.split('|')
+                newpairdict[key]=value
+            self.layerholepairdictlist.append(newpairdict)       
  
         self.block_x_accumulationlist=[0]
         self.block_y_accumulationlist=[0]
@@ -184,6 +188,7 @@ class Feilin_dxfpolyline():
         self.feilin_list=[]
         self.layernamelist=[]
         self.blocklist=[]
+        self.layerholepairlist=[]
         self.eachrationumlistlist=[]
         self.blocknum=blocknum
         self.calculatexyratio()
@@ -333,6 +338,56 @@ class Feilin_dxfpolyline():
            
         return eachrationumlist,holepolylinedict
     
+    def createlayerholepair(self,blockname,blockcount,readfilelist):
+        """
+        """
+        polylinedatasetdict=self.extractpoylinefromdxf(readfilelist)
+        layernamelist=list(polylinedatasetdict.viewkeys())
+        #layernamelist.append("Cutline")   #这里会包括Cutline以及其他除通孔层的图层
+        
+        feilin_list=[]
+        hole_list=[]
+        notepointdict={}
+        
+        for layername in layernamelist:             #生成通孔以及菲林的名称列表
+            if layername[0]=='V' or layername[0]=='v':
+                hole_list.append(layername)
+            elif layername!="Outline":
+                feilin_list.append(layername)
+        
+        layerholepairdict={}
+        for count,layer in enumerate(feilin_list):
+            layerdataset=datasetjustcopy(polylinedatasetdict[layer], 1, 1, 2*globalconfig.X_LENGTH*(count%2), 2*globalconfig.Y_LENGTH*(count/2))
+            holedataset=[]
+            outlinedataset=datasetjustcopy(polylinedatasetdict["Outline"], 1, 1, 2*globalconfig.X_LENGTH*(count%2), 2*globalconfig.Y_LENGTH*(count/2))
+            if layer in globalconfig.layerholepairdictlist[blockcount].keys():
+                holedataset=datasetjustcopy(polylinedatasetdict[globalconfig.layerholepairdictlist[blockcount][layer]], 1, 1, 2*globalconfig.X_LENGTH*(count%2), 2*globalconfig.Y_LENGTH*(count/2))
+                if "Outline" in layerholepairdict.keys():
+                    layerholepairdict["Outline"].extend(outlinedataset)
+                else:
+                    layerholepairdict["Outline"]=outlinedataset
+                if layer in layerholepairdict.keys():
+                    layerholepairdict[layer].extend(layerdataset)
+                else:
+                    layerholepairdict[layer]=layerdataset         
+                if globalconfig.layerholepairdictlist[blockcount][layer] in layerholepairdict.keys():
+                    layerholepairdict[globalconfig.layerholepairdictlist[blockcount][layer]].extend(holedataset)
+                else:
+                    layerholepairdict[globalconfig.layerholepairdictlist[blockcount][layer]]=holedataset
+                
+                notepointdict[layer+'-'+globalconfig.layerholepairdictlist[blockcount][layer]]=[(2*(count%2)-1)*globalconfig.X_LENGTH,(2*(count/2)-1)*globalconfig.Y_LENGTH]    
+            else:
+                if "Outline" in layerholepairdict.keys():
+                    layerholepairdict["Outline"].extend(outlinedataset)
+                else:
+                    layerholepairdict["Outline"]=outlinedataset  
+                if layer in layerholepairdict.keys():
+                    layerholepairdict[layer].extend(layerdataset)
+                else:
+                    layerholepairdict[layer]=layerdataset
+                notepointdict[layer]=[(2*(count%2)-1)*globalconfig.X_LENGTH,(2*(count/2)-1)*globalconfig.Y_LENGTH]   
+                    
+        return layerholepairdict,notepointdict       
     
     def outputfeilininfo(self):
         """
@@ -492,7 +547,10 @@ def buildmarkpointlist(eachrationumlist,blockcount):
             mark=globalconfig.blockmark_y_list[block_y_count]+globalconfig.markratiolist[i]      
         elif globalconfig.BLOCK_Y_NUM==1:
             mark=globalconfig.blockmark_x_list[block_x_count]+globalconfig.markratiolist[i] 
-            
+        elif globalconfig.RATIO_NUM==1:
+            mark=globalconfig.blockmark_x_list[block_x_count]+globalconfig.blockmark_y_list[block_y_count]
+        else:
+            mark=globalconfig.blockmark_x_list[block_x_count]+globalconfig.blockmark_y_list[block_y_count]+globalconfig.markratiolist[i]    
         markpointlistdict[mark]=markpointlist
     return markpointlistdict
     
@@ -1228,6 +1286,7 @@ def main():
     feilin.styles.append(Style())                #table styles
     feilin.views.append(View('Normal'))          #table view
     #feilin.views.append(ViewByWindow('Window',leftBottom=(1,0),rightTop=(2,1)))  #idem
+       
     
     #绘制菲林内部图案  
     dirdict=buildfilelist()
@@ -1257,6 +1316,7 @@ def main():
                 for e in d:                  #遍历字典
                     for polyline in d[e]:       #遍历字典值，即多段线列表
                         feilin.append(PolyLine(points=polyline,layer=e,flag=1))
+                              
         #绘制MARK
         markpointlistdict=buildmarkpointlist(eachrationumlist,blockcount)
         for mark in markpointlistdict: 
@@ -1264,8 +1324,17 @@ def main():
                 feilin.append(Text(layer='Mark',text=mark,point=markpoint,height=globalconfig.MARK_HEIGHT,rotation=globalconfig.MARK_ROTATION_ANGLE))  
         #统计通孔坐标
         feilinhole.appendnewblockholedict(holepolylinedict,blockcount)
-        #输出通孔坐标
-       
+        #绘制图层通孔对应的多段线
+        layerholedxf=Drawing()
+        layerholepairlist,notepointdict=feilin_dxfpolyline.createlayerholepair(blockname, blockcount, dirdict[blockname])
+        for e in layerholepairlist:
+            for polyline in layerholepairlist[e]:
+                layerholedxf.append(PolyLine(points=polyline,layer=e,flag=1))
+        
+        for note in notepointdict:
+            layerholedxf.append(Text(layer='0',text=note,point=notepointdict[note],height=0.5,rotation=0)) 
+        layerholedxf.saveas(str(blockname)+'.dxf')
+            
     #给菲林图层上色
     layercolordict={}
     for layername in feilin_dxfpolyline.layernamelist:
