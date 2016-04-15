@@ -11,7 +11,7 @@ from math import sqrt
 #reading file 
 
 class Globalconfig(object):
-    """read the config file
+    """read the config file and store them in a global object
     """
     configfilename='config.ini'
     
@@ -53,10 +53,13 @@ class Globalconfig(object):
         if self.config.get('EXTRA',u'拼网行分割数')!=None:    
             self.BLOCK_Y_NUM=self.config.getint('EXTRA',u'拼网行分割数')
         
+        self.BLOCK_NUM=self.BLOCK_X_NUM*self.BLOCK_Y_NUM
         self.EXTENDCOPYLIST=[]
         self.layerholepairdictlist=[]
+        self.pnlist=[]
         
         for i in range(0,self.BLOCK_X_NUM*self.BLOCK_Y_NUM):
+            self.pnlist.append(self.config.get(str(i+1),u'型号名称').encode('utf-8'))
             self.EXTENDCOPYLIST.append(tuple(self.config.get(str(i+1),u'需要做xy方向延伸的图层').encode('utf-8').split('|')))
             pairlist=tuple(self.config.get(str(i+1),u'图层与通孔配对').encode('utf-8').split(','))          
             newpairdict={}    
@@ -357,11 +360,11 @@ class Feilin_dxfpolyline():
         
         layerholepairdict={}
         for count,layer in enumerate(feilin_list):
-            layerdataset=datasetjustcopy(polylinedatasetdict[layer], 1, 1, 2*globalconfig.X_LENGTH*(count%2), 2*globalconfig.Y_LENGTH*(count/2))
+            layerdataset=datasetjustcopy(polylinedatasetdict[layer], 1, 1, 1*globalconfig.Y_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
             holedataset=[]
-            outlinedataset=datasetjustcopy(polylinedatasetdict["Outline"], 1, 1, 2*globalconfig.X_LENGTH*(count%2), 2*globalconfig.Y_LENGTH*(count/2))
+            outlinedataset=datasetjustcopy(polylinedatasetdict["Outline"], 1, 1, 1*globalconfig.Y_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
             if layer in globalconfig.layerholepairdictlist[blockcount].keys():
-                holedataset=datasetjustcopy(polylinedatasetdict[globalconfig.layerholepairdictlist[blockcount][layer]], 1, 1, 2*globalconfig.X_LENGTH*(count%2), 2*globalconfig.Y_LENGTH*(count/2))
+                holedataset=datasetjustcopy(polylinedatasetdict[globalconfig.layerholepairdictlist[blockcount][layer]], 1, 1, 1*globalconfig.Y_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
                 if "Outline" in layerholepairdict.keys():
                     layerholepairdict["Outline"].extend(outlinedataset)
                 else:
@@ -375,7 +378,7 @@ class Feilin_dxfpolyline():
                 else:
                     layerholepairdict[globalconfig.layerholepairdictlist[blockcount][layer]]=holedataset
                 
-                notepointdict[layer+'-'+globalconfig.layerholepairdictlist[blockcount][layer]]=[(2*(count%2)-1)*globalconfig.X_LENGTH,(2*(count/2)-1)*globalconfig.Y_LENGTH]    
+                notepointdict[layer+'-'+globalconfig.layerholepairdictlist[blockcount][layer]]=[1*(count%2)*globalconfig.Y_LENGTH-0.5*globalconfig.X_LENGTH,(1.5*(count/2)-0.875)*globalconfig.Y_LENGTH]    
             else:
                 if "Outline" in layerholepairdict.keys():
                     layerholepairdict["Outline"].extend(outlinedataset)
@@ -385,7 +388,7 @@ class Feilin_dxfpolyline():
                     layerholepairdict[layer].extend(layerdataset)
                 else:
                     layerholepairdict[layer]=layerdataset
-                notepointdict[layer]=[(2*(count%2)-1)*globalconfig.X_LENGTH,(2*(count/2)-1)*globalconfig.Y_LENGTH]   
+                notepointdict[layer]=[1*(count%2)*globalconfig.Y_LENGTH-0.5*globalconfig.X_LENGTH,(1.5*(count/2)-0.875)*globalconfig.Y_LENGTH]     
                     
         return layerholepairdict,notepointdict       
     
@@ -401,18 +404,21 @@ class Feilin_dxfpolyline():
         info.write("列     "+str(globalconfig.X_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO,4))+"mm\n")
         info.write("行     "+str(globalconfig.Y_ARRAY_NUM)+"×"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO,4))+"mm\n")
         info.write("瓷体X方向对应放缩率: "+str(globalconfig.X_OUTLINE_RATIO)+"    瓷体Y方向对应放缩率: "+str(globalconfig.Y_OUTLINE_RATIO)+"\n\n")
-        info.write("拼网方式区块划分:    \n")
-        info.write("列方向一共有"+str(globalconfig.BLOCK_X_NUM)+"列\n")
-        info.write("行方向一共有"+str(globalconfig.BLOCK_Y_NUM)+"行\n")
-        info.write("一共有"+str(self.blocknum)+"套丝网拼网\n")
+        if self.blocknum>1:
+            info.write("拼网方式区块划分:    \n")
+            info.write("列方向一共有"+str(globalconfig.BLOCK_X_NUM)+"列\n")
+            info.write("行方向一共有"+str(globalconfig.BLOCK_Y_NUM)+"行\n")
+            info.write("一共有"+str(self.blocknum)+"套丝网拼网\n")
         
         for j in range(0,self.blocknum):
-            info.write("第"+str(j+1)+"套网位于拼网区块的第"+str((j%globalconfig.BLOCK_X_NUM)+1)+"列    第"+str((j//globalconfig.BLOCK_X_NUM)+1)+"行\n")
-            info.write("该套丝网的区块占据了菲林"+str(globalconfig.eachblock_x_list[j%globalconfig.BLOCK_X_NUM])+"列     "+str(globalconfig.eachblock_y_list[j//globalconfig.BLOCK_X_NUM])+"行\n")
-            info.write("其中有以下放缩方案： \n")     
+            info.write("第"+str(j+1)+"套图纸对应P/N型号为"+globalconfig.pnlist[j]+"\n")
+            if self.blocknum>1:
+                info.write("位于拼网区块的第"+str((j%globalconfig.BLOCK_X_NUM)+1)+"列    第"+str((j//globalconfig.BLOCK_X_NUM)+1)+"行\n")
+            info.write(globalconfig.pnlist[j]+"型号的图案占据了菲林"+str(globalconfig.eachblock_x_list[j%globalconfig.BLOCK_X_NUM])+"列     "+str(globalconfig.eachblock_y_list[j//globalconfig.BLOCK_X_NUM])+"行\n")
+            info.write("其内部图案放缩方案有以下： \n")     
             for i in range(0,globalconfig.RATIO_NUM):
-                info.write("放缩方案"+str(i+1)+"——x方向放缩率为    "+'{:.3f}'.format(round(self.x_ratiolist[i],3))+"    y方向放缩率为    "+'{:.3f}'.format(round(self.y_ratiolist[i],3))+"    对应这套网中的放缩方案数    "+str(self.eachrationumlistlist[j][i]*globalconfig.eachblock_y_list[j//globalconfig.BLOCK_X_NUM])+"\n")
-            info.write("1bar上的该套丝网对应数量为"+str(globalconfig.eachblock_y_list[j//globalconfig.BLOCK_X_NUM]*globalconfig.eachblock_x_list[j%globalconfig.BLOCK_X_NUM])+"\n\n")
+                info.write("放缩方案"+str(i+1)+"——x方向放缩率为    "+'{:.3f}'.format(round(self.x_ratiolist[i],3))+"    y方向放缩率为    "+'{:.3f}'.format(round(self.y_ratiolist[i],3))+"    对应这款型号的放缩方案数    "+str(self.eachrationumlistlist[j][i]*globalconfig.eachblock_y_list[j//globalconfig.BLOCK_X_NUM])+"\n")
+            info.write("1bar上的该型号的设计数量为"+str(globalconfig.eachblock_y_list[j//globalconfig.BLOCK_X_NUM]*globalconfig.eachblock_x_list[j%globalconfig.BLOCK_X_NUM])+"\n\n")
         
         #info.write("放缩方案 : "+str(ratiolist)+"\n")
         #info.write("每个放缩率一行对应数量 : "+str(eachrationumlist)+"\n")
@@ -432,8 +438,9 @@ class Feilin_dxfpolyline():
         #info.write("\n阵列方式:请将以上图层图案向上阵列"+str(globalconfig.Y_ARRAY_NUM)+"行，行偏移为"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO,4))+"mm\n")
         info.write("\n阵列方式:请将以上图层图案\n") 
         for line in range(0,globalconfig.BLOCK_Y_NUM):
-            info.write("从下至上数在第"+str(line+1)+"行outline框中的图案向上阵列"+str(globalconfig.eachblock_y_list[line])+"行，行偏移为"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO,4))+"mm\n")    
-        info.write("有部分的图层图案未分布在每一行，故阵列后这些图层的图案不会布满菲林图案区域，此外正常设计，请注意\n")    
+            info.write("从下至上数，位于第"+str(line+1)+"行outline框中的图案向上阵列"+str(globalconfig.eachblock_y_list[line])+"行，行偏移为"+'{:.4f}'.format(round(globalconfig.Y_LENGTH/globalconfig.Y_OUTLINE_RATIO,4))+"mm\n") 
+        if self.blocknum>1:   
+            info.write("有部分的图层图案未分布在每一行，故阵列后这些图层的图案不会布满菲林图案区域，此外正常设计，请注意\n")    
         info.close()    
         
         
@@ -1330,9 +1337,9 @@ def main():
         for e in layerholepairlist:
             for polyline in layerholepairlist[e]:
                 layerholedxf.append(PolyLine(points=polyline,layer=e,flag=1))
-        
+        #绘制图层通孔对应的图层名称对应关系
         for note in notepointdict:
-            layerholedxf.append(Text(layer='0',text=note,point=notepointdict[note],height=0.5,rotation=0)) 
+            layerholedxf.append(Text(layer='0',text=note,point=notepointdict[note],height=0.25*globalconfig.Y_LENGTH,rotation=0)) 
         layerholedxf.saveas(str(blockname)+'.dxf')
             
     #给菲林图层上色
