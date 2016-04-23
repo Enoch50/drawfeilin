@@ -312,6 +312,7 @@ class Feilin_dxfpolyline():
         
         polylinedatasetdict=self.extractpoylinefromdxf(readfilelist)
         holepolylinedict={} 
+        feilinpolylinedict={}
         layernamelist=list(polylinedatasetdict.viewkeys())
         #layernamelist.append("Cutline")   #这里会包括Cutline以及其他除通孔层的图层
         
@@ -330,8 +331,20 @@ class Feilin_dxfpolyline():
         self.layernamelist=list(set(self.feilin_list+self.hole_list))   
         
         dictlist,eachrationumlist=self.polylinedictarraycopy(blockcount,polylinedatasetdict)
+             
         self.blocklist.append(dictlist)
         self.eachrationumlistlist.append(eachrationumlist)
+        
+        for feilinlayer in feilin_list:
+            feilinpolylinelist=[]
+            for d in dictlist:
+                feilinpolylinelist.extend(d[feilinlayer])
+            feilinpolylinedict[feilinlayer]=feilinpolylinelist
+            
+        feilinpolylinelist=[]    
+        for d in dictlist:
+            feilinpolylinelist.extend(d["Outline"])
+        feilinpolylinedict["Outline"]=feilinpolylinelist    
              
         for holelayer in hole_list:                                 #已经阵列好的第一行中每一层通孔多段线存入新的“通孔名称”-“一行中所有通孔多段线”的字典
             holepolylinelist=[]       
@@ -339,7 +352,7 @@ class Feilin_dxfpolyline():
                 holepolylinelist.extend(d[holelayer])
             holepolylinedict[holelayer]=holepolylinelist
            
-        return eachrationumlist,holepolylinedict
+        return eachrationumlist,holepolylinedict,feilinpolylinedict
     
     def createlayerholepair(self,blockname,blockcount,readfilelist):
         """
@@ -1317,13 +1330,10 @@ def main():
     feilin_dxfpolyline=Feilin_dxfpolyline(blocknum)
     
     for blockcount,blockname in enumerate(blockseqlist):#blockcount-第几个区块？ blockname-区块名称，就是目录名
-        eachrationumlist,holepolylinedict=feilin_dxfpolyline.createnewblock(blockname, blockcount,dirdict[blockname]) 
-        for block in feilin_dxfpolyline.blocklist:
-            for d in block:
-                for e in d:                  #遍历字典
-                    for polyline in d[e]:       #遍历字典值，即多段线列表
-                        feilin.append(PolyLine(points=polyline,layer=e,flag=1))
-                              
+        eachrationumlist,holepolylinedict,feilinpolylinedict=feilin_dxfpolyline.createnewblock(blockname, blockcount,dirdict[blockname]) 
+        for feilinlayer in feilinpolylinedict:                  #遍历字典
+            for polyline in feilinpolylinedict[feilinlayer]:       #遍历字典值，即多段线列表
+                feilin.append(PolyLine(points=polyline,layer=feilinlayer,flag=1))              
         #绘制MARK
         markpointlistdict=buildmarkpointlist(eachrationumlist,blockcount)
         for mark in markpointlistdict: 
@@ -1341,10 +1351,13 @@ def main():
         for note in notepointdict:
             layerholedxf.append(Text(layer='0',text=note,point=notepointdict[note],height=0.25*globalconfig.Y_LENGTH,rotation=0)) 
         layerholedxf.saveas(str(blockname)+'.dxf')
+    
+       
+    
             
     #给菲林图层上色
     layercolordict={}
-    for layername in feilin_dxfpolyline.layernamelist:
+    for layername in feilin_dxfpolyline.feilin_list:
         t=random.randint(10,17)
         layercolordict[layername]=random.randrange(10+t,240+t,10)
         
