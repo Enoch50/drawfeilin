@@ -46,7 +46,15 @@ class Globalconfig(object):
         self.MARK_HEIGHT=self.config.getfloat('DEFAULT',u'MARK文字高度')
         self.markratiolist=tuple(self.config.get('DEFAULT',u'表示放缩率的MARK标识').encode('utf-8').split('|'))   
         self.blockmark_x_list=tuple(self.config.get('DEFAULT',u'拼网区块x方向MARK标识').encode('utf-8').split('|'))   
-        self.blockmark_y_list=tuple(self.config.get('DEFAULT',u'拼网区块y方向MARK标识').encode('utf-8').split('|'))   
+        self.blockmark_y_list=tuple(self.config.get('DEFAULT',u'拼网区块y方向MARK标识').encode('utf-8').split('|')) 
+        self.DRAWHOLE=self.config.getboolean('DEFAULT', u'是否绘制通孔层')  
+        self.DRAWLONGHOLE=self.config.getboolean('DEFAULT', u'是否绘制长通孔DXF文件') 
+        
+        self.LONGHOLELIST=[]
+
+        if self.DRAWLONGHOLE==True:
+            self.LONGHOLELIST=tuple(self.config.get('LONGTHROUGHHOLE',u'长通孔列表').encode('utf-8').split('|'))
+            self.LONGHOLEDIAMETER=self.config.getfloat('LONGTHROUGHHOLE',u'长通孔孔径')
         
         if self.config.get('EXTRA',u'拼网列分割数')!=None:
             self.BLOCK_X_NUM=self.config.getint('EXTRA',u'拼网列分割数')
@@ -172,7 +180,20 @@ class Feilinhole():
                     holeposfile.write('X{:07.3f}Y{:07.3f}\n'.format(pos[0],pos[1]))                 #要格式化输出，所以先要乘以1000，然后输出小数点前的部分  
                 else:
                     holeposfile.write('X{:.0f}Y{:.0f}\n'.format(pos[0]*1000,pos[1]*1000))
-            holeposfile.close() 
+            holeposfile.close()
+    
+    def calculaterlongholecenterposlist(self,holelayer):
+        center_pos_list=[]
+        for poly in self.holepolylinearraydict[holelayer]:
+            center_pos_x=0
+            center_pos_y=0
+            for pos in poly:                            #通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
+                center_pos_x=center_pos_x+pos[0]
+                center_pos_y=center_pos_y+pos[1]
+            center_pos_x=center_pos_x/len(poly)
+            center_pos_y=center_pos_y/len(poly)
+            center_pos_list.append([center_pos_x,center_pos_y])
+        return center_pos_list
         
 class Feilin_dxfpolyline():
     """each block dxf polyline info class
@@ -562,8 +583,10 @@ def buildmarkpointlist(eachrationumlist,blockcount):
         markpointlist=[]   
         for row in range(0,eachrationumlist[i]):
             markpointlist.append([globalconfig.X_BLANK+globalconfig.CUTLINE_X_OFFSET+(globalconfig.X_LENGTH/globalconfig.X_OUTLINE_RATIO)*(rationumaccumulationlist[i]+row)+globalconfig.MARK_X_OFFSET+block_x_offset,globalconfig.Y_BLANK+globalconfig.CUTLINE_Y_OFFSET+globalconfig.MARK_Y_OFFSET+block_y_offset])
-            
-        if globalconfig.BLOCK_X_NUM==1: 
+         
+        if globalconfig.BLOCK_X_NUM==1 and globalconfig.BLOCK_Y_NUM==1:
+            mark=globalconfig.markratiolist[i]
+        elif globalconfig.BLOCK_X_NUM==1: 
             mark=globalconfig.blockmark_y_list[block_y_count]+globalconfig.markratiolist[i]      
         elif globalconfig.BLOCK_Y_NUM==1:
             mark=globalconfig.blockmark_x_list[block_x_count]+globalconfig.markratiolist[i] 
@@ -1333,7 +1356,12 @@ def main():
         eachrationumlist,holepolylinedict,feilinpolylinedict=feilin_dxfpolyline.createnewblock(blockname, blockcount,dirdict[blockname]) 
         for feilinlayer in feilinpolylinedict:                  #遍历字典
             for polyline in feilinpolylinedict[feilinlayer]:       #遍历字典值，即多段线列表
-                feilin.append(PolyLine(points=polyline,layer=feilinlayer,flag=1))              
+                feilin.append(PolyLine(points=polyline,layer=feilinlayer,flag=1))   
+          
+        if globalconfig.DRAWHOLE==True:
+            for holelayer in holepolylinedict:
+                for polyline in holepolylinedict[holelayer]:
+                    feilin.append(PolyLine(points=polyline,layer=holelayer,flag=1))           
         #绘制MARK
         markpointlistdict=buildmarkpointlist(eachrationumlist,blockcount)
         for mark in markpointlistdict: 
@@ -1351,9 +1379,20 @@ def main():
         for note in notepointdict:
             layerholedxf.append(Text(layer='0',text=note,point=notepointdict[note],height=0.25*globalconfig.Y_LENGTH,rotation=0)) 
         layerholedxf.saveas(str(blockname)+'.dxf')
-    
-       
-    
+        
+    for holelayer in holepolylinedict:
+        if holelayer in globalconfig.LONGHOLELIST:
+            longholedxf=Drawing()
+            longholedxf.blocks.append(b) 
+            for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
+                longholedxf.append(Circle(center=centerpos,radius=globalconfig.LONGHOLEDIAMETER/2))
+            for ring in buildringlist():
+                longholedxf.append(PolyPad(points=ring,layer=holelayer,flag=1,width=globalconfig.RING_WIDTH))      
+            for cutline in buildcutlineset():
+                longholedxf.append(PolyLine(points=cutline,layer=holelayer,flag=1,width=globalconfig.CUTLINE_WIDTH))
+            for flash in buildflashlist():
+                longholedxf.append(Insert(layer=holelayer,name='cutlineendpoint',point=flash))
+            longholedxf.saveas(holelayer+u'(长通孔)'+'.dxf')
             
     #给菲林图层上色
     layercolordict={}
@@ -1363,7 +1402,7 @@ def main():
         
     layercolordict["Outline"]=1
     layercolordict["Mark"]=5
-    layercolordict["Cutline"]=2
+    #layercolordict["Cutline"]=2
     
     for e in layercolordict:
         feilin.layers.append(Layer(name=e,color=layercolordict[e]))
