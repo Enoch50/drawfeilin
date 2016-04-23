@@ -221,7 +221,7 @@ class Feilin_dxfpolyline():
         d={}
         for readfile in readfilelist:                    #将readfilelist中的文件逐个按照程序进行读取分析
             filetoread=file(readfile,'r')
-            layername=filetoread.name.split(".")[0].split("\\")[-1]
+            layername=filetoread.name.split("\\")[-1].split(".")[0]
             #newfilename=filetoread.name.split('.')[0]+'.txt'
             #readme.write(newfilename)
             #filetowrite=file(newfilename,'w')
