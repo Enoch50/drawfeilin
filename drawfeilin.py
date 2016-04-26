@@ -7,6 +7,7 @@ import time
 import ConfigParser
 import codecs
 import copy
+import math
 from math import sqrt
 #reading file 
 
@@ -50,6 +51,9 @@ class Globalconfig(object):
         self.DRAWHOLE=self.config.getboolean('DEFAULT', u'是否绘制通孔层')  
         self.DRAWLONGHOLE=self.config.getboolean('DEFAULT', u'是否绘制长通孔DXF文件') 
         
+        #self.HOLEMAXDIAMETER=self.config.getfloat('HOLE',u'通孔孔径最大值')
+        #self.HOLEEDGENUM=self.config.getfloat('HOLE',u'通孔多边形边数')
+        
         self.LONGHOLELIST=[]
 
         if self.DRAWLONGHOLE==True:
@@ -65,11 +69,13 @@ class Globalconfig(object):
         self.EXTENDCOPYLIST=[]
         self.layerholepairdictlist=[]
         self.pnlist=[]
+        self.holemaxdiameterlist=[]
         
         for i in range(0,self.BLOCK_X_NUM*self.BLOCK_Y_NUM):
             self.pnlist.append(self.config.get(str(i+1),u'型号名称').encode('utf-8'))
             self.EXTENDCOPYLIST.append(tuple(self.config.get(str(i+1),u'需要做xy方向延伸的图层').encode('utf-8').split('|')))
-            pairlist=tuple(self.config.get(str(i+1),u'图层与通孔配对').encode('utf-8').split(','))          
+            pairlist=tuple(self.config.get(str(i+1),u'图层与通孔配对').encode('utf-8').split(','))
+            self.holemaxdiameterlist.append(self.config.getfloat(str(i+1),u'通孔多边形边数'))         
             newpairdict={}    
             for pair in pairlist:
                 key,value=pair.split('|')
@@ -281,6 +287,79 @@ class Feilin_dxfpolyline():
         d["Outline"]=[[[globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2],[globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2]]]
         return d
     
+    def extractpoylinefromR12dxf(self,blockcount,readfilelist):
+        d={}
+        for readfile in readfilelist:                    #将readfilelist中的文件逐个按照程序进行读取分析
+            filetoread=file(readfile,'r')
+            layername=filetoread.name.split("\\")[-1].split(".")[0]                    
+              
+            pattern1 = re.compile(r'POLYLINE')    
+            pattern2 = re.compile(r'VERTEX') 
+            pattern3= re.compile(r'\s{1}10\n(.*)\n\s{1}20\n(.*)\n')
+            
+            dataset=[]
+            holedataset=[]
+            
+            
+            #filetowrite=file(layername+'temp.txt','w')
+            readcontent=filetoread.read() 
+            polylinelist=re.split(pattern1,readcontent)[1:] 
+            for polylinestr in polylinelist:
+                polyline=[] 
+                vertexlist=re.split(pattern2,polylinestr)[1:]
+                for vertex in vertexlist:
+                    xpos=float(pattern3.search(vertex).group(1))
+                    ypos=float(pattern3.search(vertex).group(2))
+                    polyline.append([xpos,ypos])
+                    #filetowrite.write(str(xpos)+','+str(ypos)+'\n')
+                    
+                #处理掉外框以及通孔
+                if self.polylineisoutline(polyline):
+                    1
+                elif self.polylineishole(blockcount,polyline):        
+                    if layername in globalconfig.layerholepairdictlist[blockcount].keys():
+                        holedataset.append(polyline)       
+                else:
+                    dataset.append(polyline)
+                    
+                #dataset.append(polyline)
+            if layername in globalconfig.layerholepairdictlist[blockcount].keys() and globalconfig.layerholepairdictlist[blockcount][layername] not in d.keys(): 
+                d[globalconfig.layerholepairdictlist[blockcount][layername]]=holedataset
+            d[layername]=dataset
+        d["Outline"]=[[[globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2],[globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,-globalconfig.Y_LENGTH/2],[-globalconfig.X_LENGTH/2,globalconfig.Y_LENGTH/2]]]
+        
+        return d
+    
+    def polylineisoutline(self,polyline):
+        """
+        """
+        if len(polyline)==4:
+            xcenterpos=abs(polyline[0][0]+polyline[1][0]+polyline[2][0]+polyline[3][0])
+            ycenterpos=abs(polyline[0][1]+polyline[1][1]+polyline[2][1]+polyline[3][1])
+        
+            xlength=abs(polyline[0][0])+abs(polyline[1][0])
+            ylength=abs(polyline[0][1])+abs(polyline[1][1])
+        
+            if xcenterpos<0.001 and ycenterpos<0.001 and abs(xlength-globalconfig.X_LENGTH)<0.001 and abs(ylength-globalconfig.Y_LENGTH)<0.001:
+                return True
+            else:
+                return False
+        else:
+            return False   
+        
+    def polylineishole(self,blockcount,polyline):
+        """
+        """
+        edgelength=math.sqrt((polyline[0][0]-polyline[1][0])**2+(polyline[0][1]-polyline[1][1])**2)
+        for i in range(1,len(polyline)-1):
+            edgelengthi=math.sqrt((polyline[i][0]-polyline[i+1][0])**2+(polyline[i][1]-polyline[i+1][1])**2)
+            if abs(edgelengthi-edgelength)>0.001:
+                return False
+        if (edgelength/2)/math.sin(math.pi/len(polyline))*2<globalconfig.holemaxdiameterlist[blockcount]:        
+            return True
+        else:
+            return False
+    
     def calculatexyratio(self):
         """
         """
@@ -331,7 +410,7 @@ class Feilin_dxfpolyline():
         """createnewblock
         """
         
-        polylinedatasetdict=self.extractpoylinefromdxf(readfilelist)
+        polylinedatasetdict=self.extractpoylinefromR12dxf(blockcount,readfilelist)
         holepolylinedict={} 
         feilinpolylinedict={}
         layernamelist=list(polylinedatasetdict.viewkeys())
@@ -378,7 +457,7 @@ class Feilin_dxfpolyline():
     def createlayerholepair(self,blockname,blockcount,readfilelist):
         """
         """
-        polylinedatasetdict=self.extractpoylinefromdxf(readfilelist)
+        polylinedatasetdict=self.extractpoylinefromR12dxf(blockcount,readfilelist)
         layernamelist=list(polylinedatasetdict.viewkeys())
         #layernamelist.append("Cutline")   #这里会包括Cutline以及其他除通孔层的图层
         
@@ -1424,8 +1503,46 @@ def main():
     feilin_dxfpolyline.outputfeilininfo()
     #输出菲林通孔坐标文件
     feilinhole.outputholepos()
+    
+    
+def test():
+    b=Block('cutlineendpoint')
+    b.append(PolyPad(points=[(-0.02,0,0),(0.02,0,0)],flag=1,width=0.04))
+      
+    #Drawing
+    feilin=Drawing()
+    #tables
+    feilin.blocks.append(b)                      #table blocks
+    feilin.styles.append(Style())                #table styles
+    feilin.views.append(View('Normal'))          #table view
+    #feilin.views.append(ViewByWindow('Window',leftBottom=(1,0),rightTop=(2,1)))  #idem
+       
+    
+    #绘制菲林内部图案  
+    dirdict=buildfilelist()
+    blocknum=len(dirdict)   
+    
+    #一个初略的输入检查,若目录中的菲林目录数量与配置中给定的拼网行列数量对不上，则不运行程序，直接退出
+    if blocknum!=globalconfig.BLOCK_Y_NUM*globalconfig.BLOCK_X_NUM:
+        return 0
+    
+    #检查MARK大小
+    if globalconfig.MARK_HEIGHT<0.75:
+        return 0
+    
+    blockseqlist=dirdict.keys()
+    
+    if len(blockseqlist)>1:
+        blockseqlist.sort()
+     
+    feilin_dxfpolyline=Feilin_dxfpolyline(blocknum)
+    
+    for blockcount,blockname in enumerate(blockseqlist):
+        feilin_dxfpolyline.extractpoylinefromR12dxf(dirdict[blockname])
+        
+        
 if __name__=='__main__':
     globalconfig=Globalconfig()     
     main()
-    
+    #test()
 
