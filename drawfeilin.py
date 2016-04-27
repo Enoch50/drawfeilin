@@ -75,7 +75,7 @@ class Globalconfig(object):
             self.pnlist.append(self.config.get(str(i+1),u'型号名称').encode('utf-8'))
             self.EXTENDCOPYLIST.append(tuple(self.config.get(str(i+1),u'需要做xy方向延伸的图层').encode('utf-8').split('|')))
             pairlist=tuple(self.config.get(str(i+1),u'图层与通孔配对').encode('utf-8').split(','))
-            self.holemaxdiameterlist.append(self.config.getfloat(str(i+1),u'通孔多边形边数'))         
+            self.holemaxdiameterlist.append(self.config.getfloat(str(i+1),u'通孔孔径最大值'))         
             newpairdict={}    
             for pair in pairlist:
                 key,value=pair.split('|')
