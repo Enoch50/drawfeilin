@@ -50,6 +50,8 @@ class Globalconfig(object):
         self.blockmark_y_list=tuple(self.config.get('DEFAULT',u'拼网区块y方向MARK标识').encode('utf-8').split('|')) 
         self.DRAWHOLE=self.config.getboolean('DEFAULT', u'是否绘制通孔层')  
         self.DRAWLONGHOLE=self.config.getboolean('DEFAULT', u'是否绘制长通孔DXF文件') 
+        self.DRAWPAD=self.config.getboolean('DEFAULT', u'根据通孔绘制PAD') 
+        self.PADDIAMETER=self.config.getfloat('DEFAULT',u'PAD孔径')
         
         #self.HOLEMAXDIAMETER=self.config.getfloat('HOLE',u'通孔孔径最大值')
         #self.HOLEEDGENUM=self.config.getfloat('HOLE',u'通孔多边形边数')
@@ -70,6 +72,7 @@ class Globalconfig(object):
         self.layerholepairdictlist=[]
         self.pnlist=[]
         self.holemaxdiameterlist=[]
+        self.holepadpairdictlist=[]
         
         for i in range(0,self.BLOCK_X_NUM*self.BLOCK_Y_NUM):
             self.pnlist.append(self.config.get(str(i+1),u'型号名称').encode('utf-8'))
@@ -80,7 +83,14 @@ class Globalconfig(object):
             for pair in pairlist:
                 key,value=pair.split('|')
                 newpairdict[key]=value
-            self.layerholepairdictlist.append(newpairdict)       
+            self.layerholepairdictlist.append(newpairdict)
+            if self.DRAWPAD==True:
+                holepadpairlist=tuple(self.config.get(str(i+1),u'通孔与PAD配对').encode('utf-8').split(',')) 
+                newholepadpairdict={} 
+                for pair in holepadpairlist:
+                    key,value=pair.split('|')
+                    newholepadpairdict[key]=value
+                self.holepadpairdictlist.append(newholepadpairdict)     
  
         self.block_x_accumulationlist=[0]
         self.block_y_accumulationlist=[0]
@@ -191,6 +201,19 @@ class Feilinhole():
     def calculaterlongholecenterposlist(self,holelayer):
         center_pos_list=[]
         for poly in self.holepolylinearraydict[holelayer]:
+            center_pos_x=0
+            center_pos_y=0
+            for pos in poly:                            #通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
+                center_pos_x=center_pos_x+pos[0]
+                center_pos_y=center_pos_y+pos[1]
+            center_pos_x=center_pos_x/len(poly)
+            center_pos_y=center_pos_y/len(poly)
+            center_pos_list.append([center_pos_x,center_pos_y])
+        return center_pos_list
+    
+    def calculateholecenterposlist(self,polylinelist):
+        center_pos_list=[]
+        for poly in polylinelist:
             center_pos_x=0
             center_pos_y=0
             for pos in poly:                            #通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
@@ -473,11 +496,11 @@ class Feilin_dxfpolyline():
         
         layerholepairdict={}
         for count,layer in enumerate(feilin_list):
-            layerdataset=datasetjustcopy(polylinedatasetdict[layer], 1, 1, 1*globalconfig.Y_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
+            layerdataset=datasetjustcopy(polylinedatasetdict[layer], 1, 1, 1.5*globalconfig.X_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
             holedataset=[]
-            outlinedataset=datasetjustcopy(polylinedatasetdict["Outline"], 1, 1, 1*globalconfig.Y_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
+            outlinedataset=datasetjustcopy(polylinedatasetdict["Outline"], 1, 1, 1.5*globalconfig.X_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
             if layer in globalconfig.layerholepairdictlist[blockcount].keys():
-                holedataset=datasetjustcopy(polylinedatasetdict[globalconfig.layerholepairdictlist[blockcount][layer]], 1, 1, 1*globalconfig.Y_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
+                holedataset=datasetjustcopy(polylinedatasetdict[globalconfig.layerholepairdictlist[blockcount][layer]], 1, 1, 1.5*globalconfig.X_LENGTH*(count%2), 1.5*globalconfig.Y_LENGTH*(count/2))
                 if "Outline" in layerholepairdict.keys():
                     layerholepairdict["Outline"].extend(outlinedataset)
                 else:
@@ -491,7 +514,7 @@ class Feilin_dxfpolyline():
                 else:
                     layerholepairdict[globalconfig.layerholepairdictlist[blockcount][layer]]=holedataset
                 
-                notepointdict[layer+'-'+globalconfig.layerholepairdictlist[blockcount][layer]]=[1*(count%2)*globalconfig.Y_LENGTH-0.5*globalconfig.X_LENGTH,(1.5*(count/2)-0.875)*globalconfig.Y_LENGTH]    
+                notepointdict[layer+'-'+globalconfig.layerholepairdictlist[blockcount][layer]]=[1.5*(count%2)*globalconfig.X_LENGTH-0.5*globalconfig.X_LENGTH,(1.5*(count/2)-0.875)*globalconfig.Y_LENGTH]    
             else:
                 if "Outline" in layerholepairdict.keys():
                     layerholepairdict["Outline"].extend(outlinedataset)
@@ -501,7 +524,7 @@ class Feilin_dxfpolyline():
                     layerholepairdict[layer].extend(layerdataset)
                 else:
                     layerholepairdict[layer]=layerdataset
-                notepointdict[layer]=[1*(count%2)*globalconfig.Y_LENGTH-0.5*globalconfig.X_LENGTH,(1.5*(count/2)-0.875)*globalconfig.Y_LENGTH]     
+                notepointdict[layer]=[1.5*(count%2)*globalconfig.X_LENGTH-0.5*globalconfig.X_LENGTH,(1.5*(count/2)-0.875)*globalconfig.Y_LENGTH]     
                     
         return layerholepairdict,notepointdict       
     
@@ -1419,7 +1442,7 @@ def main():
         return 0
     
     #检查MARK大小
-    if globalconfig.MARK_HEIGHT<0.75:
+    if globalconfig.MARK_HEIGHT<0.70:
         return 0
     
     blockseqlist=dirdict.keys()
@@ -1440,7 +1463,16 @@ def main():
         if globalconfig.DRAWHOLE==True:
             for holelayer in holepolylinedict:
                 for polyline in holepolylinedict[holelayer]:
-                    feilin.append(PolyLine(points=polyline,layer=holelayer,flag=1))           
+                    feilin.append(PolyLine(points=polyline,layer=holelayer,flag=1))
+                    
+        if globalconfig.DRAWPAD==True:
+            for holelayer in globalconfig.holepadpairdictlist[blockcount]:
+                if holelayer in holepolylinedict.keys():
+                    if globalconfig.holepadpairdictlist[blockcount][holelayer] not in feilin_dxfpolyline.feilin_list:
+                        feilin_dxfpolyline.feilin_list.append(globalconfig.holepadpairdictlist[blockcount][holelayer])
+                    for centerpos in feilinhole.calculateholecenterposlist(holepolylinedict[holelayer]):
+                        feilin.append(Circle(center=centerpos,radius=globalconfig.PADDIAMETER/2,layer=globalconfig.holepadpairdictlist[blockcount][holelayer]))
+                   
         #绘制MARK
         markpointlistdict=buildmarkpointlist(eachrationumlist,blockcount)
         for mark in markpointlistdict: 
@@ -1459,12 +1491,13 @@ def main():
             layerholedxf.append(Text(layer='0',text=note,point=notepointdict[note],height=0.25*globalconfig.Y_LENGTH,rotation=0)) 
         layerholedxf.saveas(str(blockname)+'.dxf')
         
+        
     for holelayer in holepolylinedict:
         if holelayer in globalconfig.LONGHOLELIST:
             longholedxf=Drawing()
             longholedxf.blocks.append(b) 
             for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
-                longholedxf.append(Circle(center=centerpos,radius=globalconfig.LONGHOLEDIAMETER/2))
+                longholedxf.append(Circle(center=centerpos,radius=globalconfig.LONGHOLEDIAMETER/2,layer=holelayer))
             for ring in buildringlist():
                 longholedxf.append(PolyPad(points=ring,layer=holelayer,flag=1,width=globalconfig.RING_WIDTH))      
             for cutline in buildcutlineset():
