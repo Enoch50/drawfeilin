@@ -1476,9 +1476,10 @@ def main():
                    
         #绘制MARK
         markpointlistdict=buildmarkpointlist(eachrationumlist,blockcount)
-        for mark in markpointlistdict: 
-            for markpoint in markpointlistdict[mark]:
-                feilin.append(Text(layer='Mark',text=mark,point=markpoint,height=globalconfig.MARK_HEIGHT,rotation=globalconfig.MARK_ROTATION_ANGLE))  
+        if globalconfig.DRAWMARKNOTE==True:
+            for mark in markpointlistdict: 
+                for markpoint in markpointlistdict[mark]:
+                    feilin.append(Text(layer='Mark',text=mark,point=markpoint,height=globalconfig.MARK_HEIGHT,rotation=globalconfig.MARK_ROTATION_ANGLE))  
         #统计通孔坐标
         feilinhole.appendnewblockholedict(holepolylinedict,blockcount)
         #绘制图层通孔对应的多段线
