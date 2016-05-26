@@ -51,6 +51,7 @@ class Globalconfig(object):
         self.DRAWHOLE=self.config.getboolean('DEFAULT', u'是否绘制通孔层')  
         self.DRAWLONGHOLE=self.config.getboolean('DEFAULT', u'是否绘制长通孔DXF文件') 
         self.DRAWPAD=self.config.getboolean('DEFAULT', u'根据通孔绘制PAD') 
+        self.DRAWMARKNOTE=self.config.getboolean('DEFAULT', u'是否绘制MARK标识') 
         self.PADDIAMETER=self.config.getfloat('DEFAULT',u'PAD孔径')
         
         #self.HOLEMAXDIAMETER=self.config.getfloat('HOLE',u'通孔孔径最大值')
@@ -184,7 +185,7 @@ class Feilinhole():
         return holepolylinearraydict
     
     def outputholepos(self):
-        holenotefile=file(u'通孔模式说明'+'.txt','w')  #输出通孔模式说明
+        holenotefile=file(globalconfig.NAME_OF_FEILIN+'-'+u'通孔模式说明'+'.txt','w')  #输出通孔模式说明
         holenotefile.write("各通孔文件通孔数一览表(不包括5H):\n")
         for e in self.holepolylinearraydict:
             holeposfile=file(e+'.txt','w')
