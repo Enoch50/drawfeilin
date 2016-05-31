@@ -188,7 +188,7 @@ class Feilinhole():
         holenotefile=file(globalconfig.NAME_OF_FEILIN+'-'+u'通孔模式说明'+'.txt','w')  #输出通孔模式说明
         holenotefile.write("各通孔文件通孔数一览表(不包括5H):\n")
         for e in self.holepolylinearraydict:
-            holeposfile=file(e+'.txt','w')
+            holeposfile=file(globalconfig.NAME_OF_FEILIN+'-'+e+'.txt','w')
             centerposlist=self.calculatecenterpos(self.holepolylinearraydict[e])
             centerposlist.sort()
             holenotefile.write("通孔层    "+e+"    一共有通孔    "+'{:d}'.format(len(centerposlist))+"    个\n")    #输出每一通孔层的中心点数。即对应通孔数量
