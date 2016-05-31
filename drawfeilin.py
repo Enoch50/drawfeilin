@@ -185,7 +185,7 @@ class Feilinhole():
         return holepolylinearraydict
     
     def outputholepos(self):
-        holenotefile=file(globalconfig.NAME_OF_FEILIN+'-'+u'通孔模式说明'+'.txt','w')  #输出通孔模式说明
+        holenotefile=file(globalconfig.NAME_OF_FEILIN+u'通孔模式说明'+'.txt','w')  #输出通孔模式说明
         holenotefile.write("各通孔文件通孔数一览表(不包括5H):\n")
         for e in self.holepolylinearraydict:
             holeposfile=file(globalconfig.NAME_OF_FEILIN+'-'+e+'.txt','w')
@@ -532,7 +532,7 @@ class Feilin_dxfpolyline():
     def outputfeilininfo(self):
         """
         """
-        info=file(u'菲林说明文件'+'.txt','w')
+        info=file(globalconfig.NAME_OF_FEILIN+u'菲林说明文件'+'.txt','w')
         info.write(globalconfig.NAME_OF_FEILIN+"丝网设计转化报告\n")
         info.write("转化时间:    "+time.strftime('%Y-%m-%d %A %X',time.localtime(time.time()))+"\n")
         info.write("转化人:     "+globalconfig.AUTHOR_NAME+"\n")
