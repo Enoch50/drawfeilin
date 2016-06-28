@@ -1444,6 +1444,7 @@ def main():
     
     #检查MARK大小
     if globalconfig.MARK_HEIGHT<0.70:
+        print("MARK height is less than 0.70,plz adjust mark height!!!")
         return 0
     
     blockseqlist=dirdict.keys()
@@ -1456,6 +1457,9 @@ def main():
     feilin_dxfpolyline=Feilin_dxfpolyline(blocknum)
     
     for blockcount,blockname in enumerate(blockseqlist):#blockcount-第几个区块？ blockname-区块名称，就是目录名
+        if globalconfig.holemaxdiameterlist[blockcount]>0.1:
+            print("holemaxdiameter is larger then 0.1,there must be sth wrong!!!");
+            return 0
         eachrationumlist,holepolylinedict,feilinpolylinedict=feilin_dxfpolyline.createnewblock(blockname, blockcount,dirdict[blockname]) 
         for feilinlayer in feilinpolylinedict:                  #遍历字典
             for polyline in feilinpolylinedict[feilinlayer]:       #遍历字典值，即多段线列表
