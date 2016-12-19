@@ -1140,6 +1140,17 @@ class Point(_Entity):
     def __init__(self,points=None,**common):
         _Entity.__init__(self,**common)
         self.points=points
+        
+class SinglePoint(_Entity):
+    """Colored solid fill."""
+    def __init__(self,points,**common):
+        _Entity.__init__(self,**common)
+        self.points=points
+    def __str__(self):
+        result= ''
+        for point in [self.points]:
+            result+='0\nPOINT\n8\n%s\n%s'%(self.layer,_point(point))
+        return result
 
 class Solid(_Entity):
     """Colored solid fill."""
@@ -1535,20 +1546,32 @@ def main():
 #            #for flash in buildflashlist():
 #                #longholedxf.append(Insert(layer=holelayer,name='cutlineendpoint',point=flash))
 #            longholedxf.saveas(holelayer+u'(长通孔)'+'.dxf')
+
+    #绘制长通孔层
+    if globalconfig.DRAWLONGHOLE==True:
+        longholedxf=Drawing()
+        longholedxf.blocks.append(b) 
+        for holelayer in holepolylinedict:      
+                if holelayer in globalconfig.LONGHOLELIST:  
+                    for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
+                        longholedxf.append(Circle(center=centerpos,radius=globalconfig.LONGHOLEDIAMETER/2,layer=holelayer))
+                    for ring in buildringlist():
+                        longholedxf.append(PolyPad(points=ring,layer=holelayer,flag=1,width=globalconfig.RING_WIDTH))      
+                    #for cutline in buildcutlineset():
+                        #longholedxf.append(PolyLine(points=cutline,layer=holelayer,flag=1,width=globalconfig.CUTLINE_WIDTH))
+                    #for flash in buildflashlist():
+                        #longholedxf.append(Insert(layer=holelayer,name='cutlineendpoint',point=flash))
+        longholedxf.saveas(globalconfig.NAME_OF_FEILIN+u'(长通孔)'+'.dxf')
     
-    longholedxf=Drawing()
-    longholedxf.blocks.append(b) 
-    for holelayer in holepolylinedict:      
-            if holelayer in globalconfig.LONGHOLELIST:  
-                for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
-                    longholedxf.append(Circle(center=centerpos,radius=globalconfig.LONGHOLEDIAMETER/2,layer=holelayer))
-                for ring in buildringlist():
-                    longholedxf.append(PolyPad(points=ring,layer=holelayer,flag=1,width=globalconfig.RING_WIDTH))      
-                #for cutline in buildcutlineset():
-                    #longholedxf.append(PolyLine(points=cutline,layer=holelayer,flag=1,width=globalconfig.CUTLINE_WIDTH))
-                #for flash in buildflashlist():
-                    #longholedxf.append(Insert(layer=holelayer,name='cutlineendpoint',point=flash))
-    longholedxf.saveas(globalconfig.NAME_OF_FEILIN+u'长通孔'+'.dxf')
+    #绘制盛雄开孔机用的菲林
+    for holelayer in holepolylinedict:
+        shengxiongholedxf=Drawing()
+        shengxiongholedxf.blocks.append(b)  
+        for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
+            shengxiongholedxf.append(SinglePoint(points=centerpos))
+        for ring in buildringlist():
+            shengxiongholedxf.append(PolyPad(points=ring,layer=holelayer,flag=1,width=globalconfig.RING_WIDTH))
+        shengxiongholedxf.saveas(holelayer+u'(盛雄开孔模式)'+'.dxf')        
             
     #给菲林图层上色
     layercolordict={}
