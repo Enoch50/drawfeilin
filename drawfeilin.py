@@ -55,6 +55,7 @@ class Globalconfig(object):
         self.DRAWLONGHOLE=self.config.getboolean('DEFAULT', u'是否绘制长通孔DXF文件') 
         self.DRAWPAD=self.config.getboolean('DEFAULT', u'根据通孔绘制PAD') 
         self.DRAWMARKNOTE=self.config.getboolean('DEFAULT', u'是否绘制MARK标识') 
+        self.HOLEDIAMETER=self.config.getfloat('DEFAULT',u'通孔孔径')
         self.PADDIAMETER=self.config.getfloat('DEFAULT',u'PAD孔径')
         
         #self.HOLEMAXDIAMETER=self.config.getfloat('HOLE',u'通孔孔径最大值')
@@ -684,6 +685,15 @@ def buildringlist():
     
     return ringlist
 
+def buildringholelist():
+    ringholelist=[[globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_Y_OFFSET],
+                  [globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],
+                  [globalconfig.CUTLINE_X_OFFSET,globalconfig.FIFTH_RING_OFFSET+globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],
+                  [globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.CUTLINE_Y_OFFSET],
+                  [globalconfig.RING_DISTANCE+globalconfig.CUTLINE_X_OFFSET,globalconfig.RING_DISTANCE+globalconfig.CUTLINE_Y_OFFSET],
+                  ]
+    return ringholelist
+
 def buildmarkpointlist(eachrationumlist,blockcount):
     """build mark point list
     """
@@ -1143,9 +1153,10 @@ class Point(_Entity):
         
 class SinglePoint(_Entity):
     """Colored solid fill."""
-    def __init__(self,points,**common):
+    def __init__(self,points,layer='0',**common):
         _Entity.__init__(self,**common)
         self.points=points
+        self.layer=layer
     def __str__(self):
         result= ''
         for point in [self.points]:
@@ -1568,10 +1579,13 @@ def main():
         shengxiongholedxf=Drawing()
         shengxiongholedxf.blocks.append(b)  
         for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
-            shengxiongholedxf.append(SinglePoint(points=centerpos))
-        for ring in buildringlist():
-            shengxiongholedxf.append(PolyPad(points=ring,layer=holelayer,flag=1,width=globalconfig.RING_WIDTH))
-        shengxiongholedxf.saveas(holelayer+u'(盛雄开孔模式)'+'.dxf')        
+            if globalconfig.HOLEDIAMETER<0.045:
+                shengxiongholedxf.append(SinglePoint(points=centerpos,layer=holelayer))
+            else:
+                shengxiongholedxf.append(Circle(center=centerpos,radius=globalconfig.HOLEDIAMETER/1.6-0.0125,layer=holelayer))  
+        for ring in buildringholelist():
+            shengxiongholedxf.append(Circle(center=ring,radius=globalconfig.RING_RADIUS/2,layer='0'))  
+        shengxiongholedxf.saveas(globalconfig.NAME_OF_FEILIN+'-'+holelayer+u'(盛雄开孔模式)'+'.dxf')        
             
     #给菲林图层上色
     layercolordict={}
