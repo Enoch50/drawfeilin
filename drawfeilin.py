@@ -218,8 +218,34 @@ class Feilinhole():
             else:
                 holeposfile.write("M01\nR0M02X0\nM02\nM01\nR0M02Y0\nM02\nM08\nT02\nX-85840Y-85840\nX85840Y85840\nX-85840Y85840\nX85840Y-85840\nX-85840Y89840\nM30\n")
             holeposfile.close()
+            
+    def outputlongholepos(self):
+        for e in self.holepolylinearraydict:     
+            if e in globalconfig.LONGHOLELIST:  
+                longholeposfile=file(globalconfig.NAME_OF_FEILIN+'-'+e+u'(长通孔)'+'.drl','w')
+                longholeposfile.write('M48\nMETRIC\nVER,1\nFMAT,2\nT01C{:.3f}F042B423S6H2000\n'.format(globalconfig.LONGHOLEDIAMETER)) #内部通孔
+                longholeposfile.write('T02C0.2F042B423S6H2000\n') #定位孔
+                longholeposfile.write('T03C3.175F042B423S6H2000\n') #定位孔
+                longholeposfile.write('%\n') 
+                longholeposfile.write('T01\n')
+                centerposlist=self.calculaterlongholecenterposlist_kai(e)
+                centerposlist.sort()
+                for pos in centerposlist:
+                    longholeposfile.write('X{:0.0f}Y{:0.0f}\n'.format(pos[0]*1000,pos[1]*1000))                #要格式化输出，所以先要乘以1000，然后输出小数点前的部分 
+                if globalconfig.FEILIN_INCH==6:
+                    longholeposfile.write('T02\n')
+                    longholeposfile.write("X015000Y015000\nX137400Y015000\nX137400Y137400\nX015000Y137400\nX015000Y141400\n")
+                    longholeposfile.write('T03\n')
+                    longholeposfile.write('X060000Y009000\nX009000Y060000\nX060000Y143400\nX143400Y060000\n')
+                else:
+                    longholeposfile.write('T02\n')
+                    longholeposfile.write("X015660Y015660\nX187340Y015660\nX187340Y187340\nX015660Y187340\nX015660Y191340\n")
+                    longholeposfile.write('T03\n')
+                    longholeposfile.write('X005660Y085660\nX085660Y005660\nX197340Y085660\nX085660Y197340\n')
+                longholeposfile.write('M30')
+                longholeposfile.close()
     
-    def calculaterlongholecenterposlist(self,holelayer):
+    def calculaterlongholecenterposlist(self,holelayer): #输出长通孔drl文件坐标,坐标原点为默认值
         center_pos_list=[]
         for poly in self.holepolylinearraydict[holelayer]:
             center_pos_x=0
@@ -229,6 +255,23 @@ class Feilinhole():
                 center_pos_y=center_pos_y+pos[1]
             center_pos_x=center_pos_x/len(poly)
             center_pos_y=center_pos_y/len(poly)
+            center_pos_list.append([center_pos_x,center_pos_y])
+        return center_pos_list
+    
+    def calculaterlongholecenterposlist_kai(self,holelayer): #输出长通孔drl文件坐标,坐标原点为左下角定位孔-15,-15处
+        center_pos_list=[]
+        for poly in self.holepolylinearraydict[holelayer]:
+            center_pos_x=0
+            center_pos_y=0
+            for pos in poly:                            #通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
+                center_pos_x=center_pos_x+pos[0]
+                center_pos_y=center_pos_y+pos[1]
+            if globalconfig.FEILIN_INCH==6:
+                center_pos_x=center_pos_x/len(poly)-globalconfig.CUTLINE_X_OFFSET+15
+                center_pos_y=center_pos_y/len(poly)-globalconfig.CUTLINE_Y_OFFSET+15
+            else:
+                center_pos_x=center_pos_x/len(poly)-globalconfig.CUTLINE_X_OFFSET+15.66
+                center_pos_y=center_pos_y/len(poly)-globalconfig.CUTLINE_Y_OFFSET+15.66
             center_pos_list.append([center_pos_x,center_pos_y])
         return center_pos_list
     
@@ -1617,6 +1660,9 @@ def main():
     feilin_dxfpolyline.outputfeilininfo()
     #输出菲林通孔坐标文件
     feilinhole.outputholepos()
+    #输出长通孔坐标文件
+    if globalconfig.DRAWLONGHOLE==True:
+        feilinhole.outputlongholepos()
     
     
 def test():
