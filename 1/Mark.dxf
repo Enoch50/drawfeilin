@@ -1,0 +1,132 @@
+  0
+SECTION
+  2
+ENTITIES
+  0
+POLYLINE
+  8
+Mark
+  5
+1
+ 66
+1
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 70
+1
+  0
+VERTEX
+  8
+Mark
+  5
+2
+ 10
+0.175
+ 20
+-0.8
+  0
+VERTEX
+  8
+Mark
+  5
+3
+ 10
+-0.175
+ 20
+-0.8
+  0
+VERTEX
+  8
+Mark
+  5
+4
+ 10
+-0.175
+ 20
+-0.35
+  0
+VERTEX
+  8
+Mark
+  5
+5
+ 10
+0.175
+ 20
+-0.35
+  0
+SEQEND
+  8
+Mark
+  5
+6
+  0
+POLYLINE
+  8
+Mark
+  5
+7
+ 66
+1
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 70
+1
+  0
+VERTEX
+  8
+Mark
+  5
+8
+ 10
+0.75
+ 20
+-1.015
+  0
+VERTEX
+  8
+Mark
+  5
+9
+ 10
+-0.75
+ 20
+-1.015
+  0
+VERTEX
+  8
+Mark
+  5
+A
+ 10
+-0.75
+ 20
+1.015
+  0
+VERTEX
+  8
+Mark
+  5
+B
+ 10
+0.75
+ 20
+1.015
+  0
+SEQEND
+  8
+Mark
+  5
+C
+  0
+ENDSEC
+  0
+EOF

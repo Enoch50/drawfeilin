@@ -1,31 +1,79 @@
 # coding:utf-8
+"""Film drawing automation script.
+
+This module automates the process of drawing PCB film patterns from DXF files.
+It reads design parameters from a configuration file and generates complete
+film design files with cutting lines, positioning marks, and drill patterns.
+"""
 import os
 import sys
 import re
 import random
 import time
 import configparser
-import codecs
 import copy
 import math
 from math import sqrt
-# reading file
+
+# ============================================================================
+# Module-level Constants
+# ============================================================================
+
+# Film specification constants
+FILM_6_INCH_RING_DISTANCE = 122.4
+FILM_6_INCH_RING_RADIUS = 0.3
+FILM_8_INCH_RING_DISTANCE = 171.68
+FILM_8_INCH_RING_RADIUS = 0.215
+FILM_DEFAULT_RING_RADIUS = 0.215
+INCHES_TO_MM = 25.4
+
+# Coordinate conversion constant
+COORDINATE_SCALE = 1000  # Scale factor for converting coordinates
+
+# Default film parameters
+DEFAULT_RING_OFFSET = 3.8
+DEFAULT_LENGTH_OF_CROSS = 1.5
+DEFAULT_CUTLINE_LENGTH = 3.0
+DEFAULT_CUTLINE_WIDTH = 0.08
+DEFAULT_RING_WIDTH = 0.1
+DEFAULT_FIFTH_RING_OFFSET = 4.0
+
+# File extension constants
+DXF_EXTENSION = '.dxf'
+TEXT_EXTENSION = '.txt'
+DRL_EXTENSION = '.drl'
+
+
+def _app_dir():
+    """Return the directory containing the running app.
+
+    Returns the executable's directory when frozen by PyInstaller, otherwise
+    the directory of this script.
+    """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 class Globalconfig(object):
-    """read the config file and store them in a global object
+    """Read and manage configuration from config.ini file.
+    
+    This class loads all parameters required for film pattern generation,
+    including material properties, array dimensions, and output settings.
+    
+    Raises:
+        FileNotFoundError: If config.ini cannot be found.
+        ValueError: If required configuration parameters are missing or invalid.
     """
     configfilename = 'config.ini'
 
-    def __init__(self):
+    def __init__(self, config_path=None):
 
         self.config = configparser.ConfigParser()
-        # self.config.read(self.__class__.configfilename)
-        self.config.read_file(
-            codecs.open(
-                self.__class__.configfilename,
-                "r+b",
-                "utf-8-sig"))
+        if config_path is None:
+            config_path = os.path.join(_app_dir(), 'config.ini')
+        with open(config_path, 'r', encoding='utf-8-sig') as configfile:
+            self.config.read_file(configfile)
         self.GLOBAL_RATIO = self.config.getfloat('DEFAULT', '图案全局缩放比例')
         self.X_OFFSET = self.config.getfloat('DEFAULT', '图案原点X坐标')
         self.Y_OFFSET = self.config.getfloat('DEFAULT', '图案原点Y坐标')
@@ -167,27 +215,31 @@ class Globalconfig(object):
             self.block_y_accumulationlist.append(
                 self.block_y_accumulationlist[i - 1] + self.eachblock_y_list[i - 1])
 
+        # Set film-specific parameters based on film size
         if self.FEILIN_INCH == 6:
-            self.RING_DISTANCE = 122.4
-            self.RING_RADIUS = 0.3
+            self.RING_DISTANCE = FILM_6_INCH_RING_DISTANCE
+            self.RING_RADIUS = FILM_6_INCH_RING_RADIUS
         elif self.FEILIN_INCH == 8:
-            self.RING_DISTANCE = 171.68
-            self.RING_RADIUS = 0.215
+            self.RING_DISTANCE = FILM_8_INCH_RING_DISTANCE
+            self.RING_RADIUS = FILM_8_INCH_RING_RADIUS
         else:
-            self.RING_DISTANCE = self.FEILIN_INCH * 25.4 - 30
-            self.RING_RADIUS = 0.215
+            self.RING_DISTANCE = self.FEILIN_INCH * INCHES_TO_MM - 30
+            self.RING_RADIUS = FILM_DEFAULT_RING_RADIUS
 
-        self.RING_OFFSET = 3.8
-        self.LENGTH_OF_CROSS = 1.5
-        self.CUTLINE_LENGTH = 3.0
-        self.CUTLINE_WIDTH = 0.08
-        self.RING_WIDTH = 0.1
-        self.FIFTH_RING_OFFSET = 4.0
+        # Set standard parameters
+        self.RING_OFFSET = DEFAULT_RING_OFFSET
+        self.LENGTH_OF_CROSS = DEFAULT_LENGTH_OF_CROSS
+        self.CUTLINE_LENGTH = DEFAULT_CUTLINE_LENGTH
+        self.CUTLINE_WIDTH = DEFAULT_CUTLINE_WIDTH
+        self.RING_WIDTH = DEFAULT_RING_WIDTH
+        self.FIFTH_RING_OFFSET = DEFAULT_FIFTH_RING_OFFSET
 
-        self.X_BLANK = (self.RING_DISTANCE - self.X_LENGTH /
-                        self.X_OUTLINE_RATIO * self.X_ARRAY_NUM) / 2
-        self.Y_BLANK = (self.RING_DISTANCE - self.Y_LENGTH /
-                        self.Y_OUTLINE_RATIO * self.Y_ARRAY_NUM) / 2
+        # Cache commonly used calculations to avoid repeated computation
+        self.X_SCALED_LENGTH = self.X_LENGTH / self.X_OUTLINE_RATIO
+        self.Y_SCALED_LENGTH = self.Y_LENGTH / self.Y_OUTLINE_RATIO
+
+        self.X_BLANK = (self.RING_DISTANCE - self.X_SCALED_LENGTH * self.X_ARRAY_NUM) / 2
+        self.Y_BLANK = (self.RING_DISTANCE - self.Y_SCALED_LENGTH * self.Y_ARRAY_NUM) / 2
 
 
 class Feilinhole():
@@ -199,57 +251,61 @@ class Feilinhole():
         # self.holepolylinearraydict=self.holepolylinedictarraycopy()
         self.holepolylinearraydict = {}
 
-    def calculatecenterpos(self, holepolylinelist):
+    def calculate_center_positions(self, holepolylinelist):
+        """Calculate center positions of hole polylines.
+        
+        Computes the geometric center of each polyline, adjusting for film
+        size and coordinate system offset.
+        
+        Args:
+            holepolylinelist: List of polylines representing holes
+            
+        Returns:
+            List of [center_x, center_y] positions
+        """
         center_pos_list = []
         for poly in holepolylinelist:
-            center_pos_x = 0
-            center_pos_y = 0
-            for pos in poly:  # 通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
-                center_pos_x = center_pos_x + pos[0]
-                center_pos_y = center_pos_y + pos[1]
-            if globalconfig.FEILIN_INCH == 6:
-                center_pos_x = center_pos_x / \
-                    len(poly) - globalconfig.CUTLINE_X_OFFSET
-                center_pos_y = center_pos_y / \
-                    len(poly) - globalconfig.CUTLINE_Y_OFFSET
-            else:
-                center_pos_x = center_pos_x / \
-                    len(poly) - (globalconfig.CUTLINE_X_OFFSET + globalconfig.RING_DISTANCE / 2)
-                center_pos_y = center_pos_y / \
-                    len(poly) - (globalconfig.CUTLINE_Y_OFFSET + globalconfig.RING_DISTANCE / 2)
-            center_pos_list.append([center_pos_x, center_pos_y])
+            # Calculate average position of all vertices
+            center_pos_x = sum(pos[0] for pos in poly) / len(poly)
+            center_pos_y = sum(pos[1] for pos in poly) / len(poly)
+            
+            # Apply coordinate offset based on film inch size
+            offset_x = globalconfig.CUTLINE_X_OFFSET
+            offset_y = globalconfig.CUTLINE_Y_OFFSET
+            
+            if globalconfig.FEILIN_INCH != 6:
+                offset_x += globalconfig.RING_DISTANCE / 2
+                offset_y += globalconfig.RING_DISTANCE / 2
+            
+            center_pos_list.append([center_pos_x - offset_x, center_pos_y - offset_y])
         return center_pos_list
 
-    def calculatecenterposnew(self, holepolylinelist):
-        center_pos_list = []
-        for poly in holepolylinelist:
-            center_pos_x = 0
-            center_pos_y = 0
-            for pos in poly:  # 通过累加各多段线顶点坐标值，然后除以多段线的顶点数，计算出其中心点的坐标
-                center_pos_x = center_pos_x + pos[0]
-                center_pos_y = center_pos_y + pos[1]
-            center_pos_x = center_pos_x / \
-                len(poly) - (globalconfig.CUTLINE_X_OFFSET + globalconfig.RING_DISTANCE / 2)
-            center_pos_y = center_pos_y / \
-                len(poly) - (globalconfig.CUTLINE_Y_OFFSET + globalconfig.RING_DISTANCE / 2)
-            center_pos_list.append([center_pos_x, center_pos_y])
-        return center_pos_list
-
-    def calculateholenumber(self):
+    def get_hole_count(self):
+        """Get the total number of holes in all layers.
+        
+        Returns:
+            Total count of hole positions
+            
+        Raises:
+            AttributeError: If hole position list hasn't been initialized
+        """
+        if not hasattr(self, 'holeposlist'):
+            return 0
         return len(self.holeposlist)
 
-    def appendnewblockholedict(self, holepolylinedict, blockcount):
-        self.block_x_count = blockcount % globalconfig.BLOCK_X_NUM
-        self.block_y_count = blockcount // globalconfig.BLOCK_X_NUM
-
-        newholepolylinearraydict = self.holepolylinedictarraycopy(
-            holepolylinedict)
-        for e in newholepolylinearraydict:
+    def add_block_holes(self, holepolylinedict, blockcount):
+        """Add hole polylines for a new block to the storage.
+        
+        Args:
+            holepolylinedict: Dictionary mapping layer names to polyline lists
+            blockcount: Sequential index of the block being processed
+        """
+        for e in holepolylinedict:
             if e in list(self.holepolylinearraydict.keys()):
                 self.holepolylinearraydict[e].extend(
-                    newholepolylinearraydict[e])
+                    holepolylinedict[e])
             else:
-                self.holepolylinearraydict[e] = newholepolylinearraydict[e]
+                self.holepolylinearraydict[e] = holepolylinedict[e]
 
     def holepolylinedictarraycopy(self, holepolylinedict):
         holepolylinearraydict = {}
@@ -280,7 +336,7 @@ class Feilinhole():
             holeposfile = open(
                 globalconfig.NAME_OF_FEILIN + '-' + e + '.txt', 'w')
             centerposlist = sorted(
-                self.calculatecenterposnew(
+                self.calculate_center_positions(
                     self.holepolylinearraydict[e]))
             holenotefile.write(
                 "通孔层    " +
@@ -306,7 +362,7 @@ class Feilinhole():
     def outputlongholepos(self):
         for e in self.holepolylinearraydict:
             if e in globalconfig.LONGHOLELIST:
-                longholeposfile = file(
+                longholeposfile = open(
                     globalconfig.NAME_OF_FEILIN + '-' + e + '(长通孔)' + '.drl', 'w')
                 longholeposfile.write(
                     'M48\nMETRIC\nVER,1\nFMAT,2\nT01C{:.3f}F042B423S6H2000\n'.format(
@@ -435,7 +491,8 @@ class Feilin_dxfpolyline():
     def extractpoylinefromdxf(self, readfilelist):
         d = {}
         for readfile in readfilelist:  # 将readfilelist中的文件逐个按照程序进行读取分析
-            filetoread = file(readfile, 'r')
+            filetoread = open(
+                readfile, 'r', encoding='utf-8', errors='replace')
             layername = filetoread.name.split("\\")[-1].split(".")[0]
             # newfilename=filetoread.name.split('.')[0]+'.txt'
             # readme.write(newfilename)
@@ -1363,18 +1420,23 @@ def buildmarkpointlist(eachrationumlist, blockcount):
     return markpointlistdict
 
 
-def buildfilelist():
-    """input nothing and return nothing
-    """
-    readfilelist = []
-    dirdict = {}
-    # writefilelist=[]
-    mypath = os.path.dirname(sys.argv[0])
-    mypath = os.path.abspath(mypath)
-    os.chdir(mypath)
+def buildfilelist(workdir=None):
+    """Scan a directory for numbered sub-folders containing DXF files.
 
-    for item in os.listdir(mypath):
-        filepath = os.path.join(mypath, item)
+    Args:
+        workdir: Directory to scan. Defaults to the directory of this script.
+
+    Returns:
+        Dictionary mapping each numbered folder (int) to the list of DXF
+        file paths found inside it.
+    """
+    dirdict = {}
+    if workdir is None:
+        workdir = _app_dir()
+    workdir = os.path.abspath(workdir)
+
+    for item in os.listdir(workdir):
+        filepath = os.path.join(workdir, item)
         if os.path.isdir(filepath) and item.isdigit():
             readfilelist = []
             for onefile in os.listdir(filepath):
@@ -2371,7 +2433,35 @@ class LineList(_Entity):
 # ---test
 
 
-def main():
+def main(workdir=None, config_path=None):
+    """Generate film design files for the given working directory.
+
+    Args:
+        workdir: Directory containing numbered DXF sub-folders. All output
+            files are written here. Defaults to the directory of this script.
+        config_path: Path to config.ini. Defaults to config.ini in workdir.
+
+    Returns:
+        0 on success or when the input check fails, or None on error paths.
+    """
+    global globalconfig
+    if workdir is None:
+        workdir = _app_dir()
+    workdir = os.path.abspath(workdir)
+    if config_path is None:
+        config_path = os.path.join(workdir, 'config.ini')
+    globalconfig = Globalconfig(config_path)
+
+    old_cwd = os.getcwd()
+    os.chdir(workdir)
+    try:
+        return _run_film_generation(workdir)
+    finally:
+        os.chdir(old_cwd)
+
+
+def _run_film_generation(workdir):
+    """Run the generation pipeline in the given working directory."""
     # Blocks
     # hole_list=[]
     # feilin_list=[]
@@ -2388,7 +2478,7 @@ def main():
     # #idem
 
     # 绘制菲林内部图案
-    dirdict = buildfilelist()
+    dirdict = buildfilelist(workdir)
     blocknum = len(dirdict)
 
     # 一个初略的输入检查,若目录中的菲林目录数量与配置中给定的拼网行列数量对不上，则不运行程序，提示后直接退出
@@ -2461,7 +2551,7 @@ def main():
                             height=globalconfig.MARK_HEIGHT,
                             rotation=globalconfig.MARK_ROTATION_ANGLE))
         # 统计通孔坐标
-        feilinhole.appendnewblockholedict(holepolylinedict, blockcount)
+        feilinhole.add_block_holes(holepolylinedict, blockcount)
 
         # 绘制图层通孔对应的多段线
         layerholedxf = Drawing()
@@ -2747,5 +2837,4 @@ def main():
 
 
 if __name__ == '__main__':
-    globalconfig = Globalconfig()
     main()

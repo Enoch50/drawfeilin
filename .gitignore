@@ -4,3 +4,10 @@
 /.project
 /.pydevproject
 /.gitignore
+
+/__pycache__/
+/dist/
+/build/
+/*.spec
+/.txt
+/.dxf
