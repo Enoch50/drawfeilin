@@ -43,6 +43,32 @@ DXF_EXTENSION = '.dxf'
 TEXT_EXTENSION = '.txt'
 DRL_EXTENSION = '.drl'
 
+# Positioning-ring mode: '4H' (no fifth ring) or '5H' (includes fifth ring)
+POSITION_RING_MODE = '4H'
+
+# Shengxiong hole film mode: 1 (two-layer circles) or 2 (tiered, original)
+SHENGXIONG_MODE = 1
+
+
+def set_position_ring_mode(mode):
+    """Set positioning-ring mode to '4H' or '5H'.
+
+    '5H' reproduces the original buildringlist/buildringholelist output;
+    '4H' drops the entries that use FIFTH_RING_OFFSET.
+    """
+    global POSITION_RING_MODE
+    if mode not in ('4H', '5H'):
+        raise ValueError("mode must be '4H' or '5H'")
+    POSITION_RING_MODE = mode
+
+
+def set_shengxiong_mode(mode):
+    """Set shengxiong hole film mode to 1 or 2."""
+    global SHENGXIONG_MODE
+    if mode not in (1, 2):
+        raise ValueError('mode must be 1 or 2')
+    SHENGXIONG_MODE = mode
+
 
 def _app_dir():
     """Return the directory containing the running app.
@@ -1314,8 +1340,11 @@ def buildflashlist():
 
 
 def buildringlist():
-    '''build ring list
-    '''
+    """Build positioning ring list.
+
+    '5H' keeps the original five rings (including the FIFTH_RING_OFFSET one);
+    '4H' omits that entry.
+    """
     ringlist = [[[-globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   0.0 + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
@@ -1327,20 +1356,22 @@ def buildringlist():
                 [[-globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   globalconfig.FIFTH_RING_OFFSET + globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
-                    globalconfig.FIFTH_RING_OFFSET + globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET]],
+                  globalconfig.FIFTH_RING_OFFSET + globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET]],
                 [[globalconfig.RING_DISTANCE - globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   0.0 + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_DISTANCE + globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
-                    0.0 + globalconfig.CUTLINE_Y_OFFSET]],
+                  0.0 + globalconfig.CUTLINE_Y_OFFSET]],
                 [[globalconfig.RING_DISTANCE - globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_DISTANCE + globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
-                    globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET]]]
-
+                  globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET]]]
+    if POSITION_RING_MODE == '4H':
+        ringlist.pop(2)  # 去掉带 FIFTH_RING_OFFSET 的第五个环
     return ringlist
 
 
 def buildringholelist():
+    """Build positioning ring hole positions (4H omits the fifth-ring entry)."""
     ringholelist = [[globalconfig.CUTLINE_X_OFFSET,
                      globalconfig.CUTLINE_Y_OFFSET],
                     [globalconfig.CUTLINE_X_OFFSET,
@@ -1352,6 +1383,8 @@ def buildringholelist():
                     [globalconfig.RING_DISTANCE + globalconfig.CUTLINE_X_OFFSET,
                      globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET],
                     ]
+    if POSITION_RING_MODE == '4H':
+        ringholelist.pop(2)  # 去掉带 FIFTH_RING_OFFSET 的第五个定位孔
     return ringholelist
 
 
@@ -2433,6 +2466,125 @@ class LineList(_Entity):
 # ---test
 
 
+def _shengxiong_mode1(drawing, centerposlist, holelayer):
+    """模式1：每个孔画 holelayer 圆（半径 HOLEDIAMETER/3）与 PET 圆（0.005）。"""
+    for centerpos in centerposlist:
+        drawing.append(
+            Circle(
+                center=centerpos,
+                radius=globalconfig.HOLEDIAMETER / 3,
+                layer=holelayer))
+        drawing.append(
+            Circle(
+                center=centerpos,
+                radius=0.005,
+                layer='PET'))
+
+
+def _shengxiong_mode2(drawing, centerposlist, holelayer):
+    """模式2：沿用原始分档逻辑（按通孔孔径分档绘制圆与 PET 点）。"""
+    for centerpos in centerposlist:
+        if globalconfig.HOLEDIAMETER <= 0.0425:
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer=holelayer))
+        elif globalconfig.HOLEDIAMETER >= 0.0425 and globalconfig.HOLEDIAMETER <= 0.0595:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=0.0175,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+        elif globalconfig.HOLEDIAMETER >= 0.0595 and globalconfig.HOLEDIAMETER <= 0.0765:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=0.0275,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+        elif globalconfig.HOLEDIAMETER >= 0.0765 and globalconfig.HOLEDIAMETER <= 0.0935:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=0.0375,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+        elif globalconfig.HOLEDIAMETER >= 0.0935 and globalconfig.HOLEDIAMETER <= 0.102:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=0.0475,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+        elif globalconfig.HOLEDIAMETER >= 0.102 and globalconfig.HOLEDIAMETER <= 0.119:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=0.055,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+        elif globalconfig.HOLEDIAMETER >= 0.119 and globalconfig.HOLEDIAMETER <= 0.1445:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=0.065,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+        elif globalconfig.HOLEDIAMETER >= 0.1445:
+            drawing.append(
+                Circle(
+                    center=centerpos,
+                    radius=globalconfig.HOLEDIAMETER /
+                    1.7 -
+                    0.01,
+                    layer=holelayer))
+            drawing.append(
+                SinglePoint(
+                    points=centerpos,
+                    layer='PET'))
+
+
+def generate_shengxiong_film(block, holelayer, centerposlist):
+    """生成并保存单个通孔层的盛雄开孔 DXF 文件（按 SHENGXIONG_MODE）。"""
+    drawing = Drawing()
+    drawing.blocks.append(block)
+    if SHENGXIONG_MODE == 1:
+        _shengxiong_mode1(drawing, centerposlist, holelayer)
+    else:
+        _shengxiong_mode2(drawing, centerposlist, holelayer)
+    for ring in buildringholelist():
+        drawing.append(
+            Circle(
+                center=ring,
+                radius=globalconfig.RING_RADIUS / 2,
+                layer='0'))
+    drawing.saveas(
+        globalconfig.NAME_OF_FEILIN +
+        '-' +
+        holelayer +
+        '(盛雄开孔模式)' +
+        '.dxf')
+
+
 def main(workdir=None, config_path=None):
     """Generate film design files for the given working directory.
 
@@ -2638,98 +2790,10 @@ def _run_film_generation(workdir):
 
     # 绘制盛雄开孔机用的菲林
     for holelayer in holepolylinedict:
-        shengxiongholedxf = Drawing()
-        shengxiongholedxf.blocks.append(b)
-        for centerpos in feilinhole.calculaterlongholecenterposlist(holelayer):
-            if globalconfig.HOLEDIAMETER <= 0.0425:
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer=holelayer))
-            elif globalconfig.HOLEDIAMETER >= 0.0425 and globalconfig.HOLEDIAMETER <= 0.0595:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=0.0175,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-            elif globalconfig.HOLEDIAMETER >= 0.0595 and globalconfig.HOLEDIAMETER <= 0.0765:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=0.0275,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-            elif globalconfig.HOLEDIAMETER >= 0.0765 and globalconfig.HOLEDIAMETER <= 0.0935:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=0.0375,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-            elif globalconfig.HOLEDIAMETER >= 0.0935 and globalconfig.HOLEDIAMETER <= 0.102:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=0.0475,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-            elif globalconfig.HOLEDIAMETER >= 0.102 and globalconfig.HOLEDIAMETER <= 0.119:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=0.055,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-            elif globalconfig.HOLEDIAMETER >= 0.119 and globalconfig.HOLEDIAMETER <= 0.1445:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=0.065,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-            elif globalconfig.HOLEDIAMETER >= 0.1445:
-                shengxiongholedxf.append(
-                    Circle(
-                        center=centerpos,
-                        radius=globalconfig.HOLEDIAMETER /
-                        1.7 -
-                        0.01,
-                        layer=holelayer))
-                shengxiongholedxf.append(
-                    SinglePoint(
-                        points=centerpos,
-                        layer='PET'))
-        for ring in buildringholelist():
-            shengxiongholedxf.append(
-                Circle(
-                    center=ring,
-                    radius=globalconfig.RING_RADIUS / 2,
-                    layer='0'))
-        shengxiongholedxf.saveas(
-            globalconfig.NAME_OF_FEILIN +
-            '-' +
-            holelayer +
-            '(盛雄开孔模式)' +
-            '.dxf')
+        generate_shengxiong_film(
+            b,
+            holelayer,
+            feilinhole.calculaterlongholecenterposlist(holelayer))
 
     # 绘制切割线,菲林名称,定位圆环,十字架
     for feilin_layer in feilin_dxfpolyline.feilin_list:

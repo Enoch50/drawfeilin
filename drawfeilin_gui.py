@@ -381,6 +381,33 @@ class App(object):
         self.root.geometry('960x780')
         self.root.minsize(820, 640)
 
+        # ---- 主菜单 ----
+        menubar = tk.Menu(self.root)
+
+        ring_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label='定位孔配置', menu=ring_menu)
+        self.ring_menu = ring_menu
+        self.ring_mode_var = tk.StringVar(value=drawfeilin.POSITION_RING_MODE)
+        for mode in ('4H', '5H'):
+            ring_menu.add_radiobutton(
+                label=mode,
+                value=mode,
+                variable=self.ring_mode_var,
+                command=lambda m=mode: drawfeilin.set_position_ring_mode(m))
+
+        sx_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label='盛雄开孔模式', menu=sx_menu)
+        self.sx_menu = sx_menu
+        self.sx_mode_var = tk.IntVar(value=drawfeilin.SHENGXIONG_MODE)
+        for mode in (1, 2):
+            sx_menu.add_radiobutton(
+                label='模式%d' % mode,
+                value=mode,
+                variable=self.sx_mode_var,
+                command=lambda m=mode: drawfeilin.set_shengxiong_mode(m))
+
+        self.root.config(menu=menubar)
+
         main = ttk.Frame(self.root, padding=8)
         main.pack(fill='both', expand=True)
 
@@ -511,43 +538,131 @@ class App(object):
         for child in self.notebook.winfo_children():
             child.destroy()
         self.section_vars = {}
+        self.block_frames = {}
+        self.block_combo = None
+        self.block_holder = None
+
+        digit_sections = [section for section in data if section.isdigit()]
         for section, options in data.items():
-            frame = ttk.Frame(self.notebook)
-            canvas = tk.Canvas(frame, highlightthickness=0)
-            scrollbar = ttk.Scrollbar(
-                frame, orient='vertical', command=canvas.yview)
-            inner = ttk.Frame(canvas)
-            inner.bind(
-                '<Configure>',
-                lambda e, c=canvas: c.configure(scrollregion=c.bbox('all')))
-            canvas.create_window((0, 0), window=inner, anchor='nw')
-            canvas.configure(yscrollcommand=scrollbar.set)
-            canvas.bind(
-                '<MouseWheel>',
-                lambda e, c=canvas: c.yview_scroll(
-                    int(-e.delta / 120), 'units'))
-
-            section_vars = {}
-            for row, (option, value) in enumerate(options.items()):
-                ttk.Label(inner, text=option).grid(
-                    row=row, column=0, sticky='w', padx=6, pady=3)
-                option_type = OPTION_TYPES.get(option, 'text')
-                if option_type == 'bool':
-                    var = tk.StringVar(value=value)
-                    box = ttk.Combobox(
-                        inner, textvariable=var, values=YES_NO,
-                        width=8, state='readonly')
-                    box.grid(row=row, column=1, sticky='w', padx=6, pady=3)
-                else:
-                    var = tk.StringVar(value=value)
-                    entry = ttk.Entry(inner, textvariable=var, width=72)
-                    entry.grid(row=row, column=1, sticky='w', padx=6, pady=3)
-                section_vars[option] = var
+            if section.isdigit():
+                continue
+            frame, section_vars = self._build_section_form(
+                self.notebook, options)
             self.section_vars[section] = section_vars
-
-            canvas.pack(side='left', fill='both', expand=True)
-            scrollbar.pack(side='right', fill='y')
             self.notebook.add(frame, text=_tab_title(section))
+
+        if digit_sections:
+            self._build_block_tab(data, digit_sections)
+
+    def _build_section_form(self, parent, options):
+        """在 parent 内构建一个区块的可滚动表单，返回 (frame, 选项变量字典)。"""
+        frame = ttk.Frame(parent)
+        canvas = tk.Canvas(frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(
+            frame, orient='vertical', command=canvas.yview)
+        inner = ttk.Frame(canvas)
+        inner.bind(
+            '<Configure>',
+            lambda e, c=canvas: c.configure(scrollregion=c.bbox('all')))
+        canvas.create_window((0, 0), window=inner, anchor='nw')
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind(
+            '<MouseWheel>',
+            lambda e, c=canvas: c.yview_scroll(
+                int(-e.delta / 120), 'units'))
+
+        section_vars = {}
+        for row, (option, value) in enumerate(options.items()):
+            ttk.Label(inner, text=option).grid(
+                row=row, column=0, sticky='w', padx=6, pady=3)
+            option_type = OPTION_TYPES.get(option, 'text')
+            if option_type == 'bool':
+                var = tk.StringVar(value=value)
+                box = ttk.Combobox(
+                    inner, textvariable=var, values=YES_NO,
+                    width=8, state='readonly')
+                box.grid(row=row, column=1, sticky='w', padx=6, pady=3)
+            else:
+                var = tk.StringVar(value=value)
+                entry = ttk.Entry(inner, textvariable=var, width=72)
+                entry.grid(row=row, column=1, sticky='w', padx=6, pady=3)
+            section_vars[option] = var
+
+        canvas.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
+        return frame, section_vars
+
+    def _active_block_numbers(self, data):
+        """返回当前 拼网列/行分割数 范围内且配置中真实存在的区块号列表。"""
+        digit_sections = [section for section in data if section.isdigit()]
+        if not digit_sections:
+            return []
+        try:
+            col = int(data.get('EXTRA', {}).get('拼网列分割数', '') or 1)
+            row = int(data.get('EXTRA', {}).get('拼网行分割数', '') or 1)
+            limit = max(col, 1) * max(row, 1)
+        except (TypeError, ValueError):
+            limit = len(digit_sections)
+        return [
+            str(i) for i in range(1, limit + 1) if str(i) in digit_sections]
+
+    def _show_block(self, section):
+        """只显示指定区块的表单，其余隐藏。"""
+        for name, frame in self.block_frames.items():
+            if name == section:
+                frame.pack(fill='both', expand=True)
+            else:
+                frame.pack_forget()
+
+    def _on_block_selected(self, _event=None):
+        section = self.block_combo.get()
+        if section in self.block_frames:
+            self._show_block(section)
+
+    def _build_block_tab(self, data, digit_sections):
+        """构建“拼网区块”页签：顶部下拉选择区块，下方叠层显示表单。"""
+        outer = ttk.Frame(self.notebook)
+        header = ttk.Frame(outer)
+        header.pack(fill='x', padx=6, pady=4)
+        ttk.Label(header, text='选择区块:').pack(side='left', padx=(0, 6))
+        combo = ttk.Combobox(header, state='readonly', width=10)
+        combo.pack(side='left')
+        combo.bind('<<ComboboxSelected>>', self._on_block_selected)
+        ttk.Label(
+            header,
+            text='区块编号与工作目录中的数字文件夹一一对应',
+            foreground='gray').pack(side='left', padx=(12, 0))
+
+        holder = ttk.Frame(outer)
+        holder.pack(fill='both', expand=True, padx=2, pady=(0, 2))
+
+        self.block_combo = combo
+        self.block_holder = holder
+        self.block_frames = {}
+        for section in digit_sections:
+            frame, section_vars = self._build_section_form(
+                holder, data[section])
+            self.section_vars[section] = section_vars
+            self.block_frames[section] = frame
+
+        active = self._active_block_numbers(data)
+        combo['values'] = active
+        if active:
+            combo.set(active[0])
+            self._show_block(active[0])
+        self.notebook.add(outer, text='拼网区块')
+
+    def _refresh_block_dropdown(self, data=None):
+        """保存后按新的拼网行/列分割数刷新下拉范围。"""
+        if not hasattr(self, 'block_combo') or self.block_combo is None:
+            return
+        data = data if data is not None else self._collect_config()
+        active = self._active_block_numbers(data)
+        self.block_combo['values'] = active
+        current = self.block_combo.get()
+        if active and current not in active:
+            self.block_combo.set(active[0])
+            self._show_block(active[0])
 
     def _collect_config(self):
         data = {}
@@ -575,6 +690,7 @@ class App(object):
             messagebox.showerror('保存失败', str(exc))
             return False
         self.data = data
+        self._refresh_block_dropdown(data)
         messagebox.showinfo('保存成功', '配置已保存到:\n%s' % path)
         return True
 
@@ -666,6 +782,7 @@ class App(object):
             messagebox.showerror('保存失败', str(exc))
             return False
         self.data = data
+        self._refresh_block_dropdown(data)
         return True
 
     def _run_worker(self, workdir, config_path):
