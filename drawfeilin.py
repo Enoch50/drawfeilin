@@ -171,6 +171,10 @@ class Globalconfig(object):
 
         self.IS_PATTERN_MIRROR = self.config.getboolean('EXTRA', '是否镜像图层')
         self.IS_CUTLINE_SHIFTIN = self.config.getboolean('EXTRA', '是否切割线内缩')
+        self.LDI_ENABLED = self.config.getboolean(
+            'EXTRA', '是否输出LDI', fallback=True)
+        self.SHENGXIONG_ARRAY_FULL = self.config.getboolean(
+            'EXTRA', '是否开孔阵列满', fallback=True)
 
         self.BLOCK_NUM = self.BLOCK_X_NUM * self.BLOCK_Y_NUM
         self.EXTENDCOPYLIST = []
@@ -351,16 +355,23 @@ class Feilinhole():
             holepolylinearraydict[e] = holepolylinedataset
         return holepolylinearraydict
 
-    def outputholepos(self):
+    def outputholepos(self, output_dir=None):
+        """输出通孔模式说明与各通孔层坐标文件。
+
+        盛雄开孔模式为模式1 时只输出“通孔模式说明.txt”，不输出各通孔层 txt。
+        """
+
+        def make_path(name):
+            return os.path.join(output_dir, name) if output_dir else name
+
         holenotefile = open(
-            globalconfig.NAME_OF_FEILIN +
-            '通孔模式说明' +
-            '.txt',
+            make_path(
+                globalconfig.NAME_OF_FEILIN +
+                '通孔模式说明' +
+                '.txt'),
             'w')  # 输出通孔模式说明
         holenotefile.write("各通孔文件通孔数一览表(不包括5H):\n")
         for e in self.holepolylinearraydict:
-            holeposfile = open(
-                globalconfig.NAME_OF_FEILIN + '-' + e + '.txt', 'w')
             centerposlist = sorted(
                 self.calculate_center_positions(
                     self.holepolylinearraydict[e]))
@@ -371,6 +382,12 @@ class Feilinhole():
                 '{:d}'.format(
                     len(centerposlist)) +
                 "    个\n")  # 输出每一通孔层的中心点数。即对应通孔数量
+            if SHENGXIONG_MODE == 1:
+                continue  # 模式1：不输出各通孔层坐标 txt
+            holeposfile = open(
+                make_path(
+                    globalconfig.NAME_OF_FEILIN + '-' + e + '.txt'),
+                'w')
             holeposfile.write("T01\nM25\n")
             for pos in centerposlist:
                 holeposfile.write(
@@ -384,12 +401,19 @@ class Feilinhole():
                 holeposfile.write(
                     "M01\nR0M02X0\nM02\nM01\nR0M02Y0\nM02\nM08\nT02\nX-85840Y-85840\nX85840Y85840\nX-85840Y85840\nX85840Y-85840\nX-85840Y89840\nM30\n")
             holeposfile.close()
+        holenotefile.close()
 
-    def outputlongholepos(self):
+    def outputlongholepos(self, output_dir=None):
+        def make_path(name):
+            return os.path.join(output_dir, name) if output_dir else name
+
         for e in self.holepolylinearraydict:
             if e in globalconfig.LONGHOLELIST:
                 longholeposfile = open(
-                    globalconfig.NAME_OF_FEILIN + '-' + e + '(长通孔)' + '.drl', 'w')
+                    make_path(
+                        globalconfig.NAME_OF_FEILIN +
+                        '-' + e + '(长通孔)' + '.drl'),
+                    'w')
                 longholeposfile.write(
                     'M48\nMETRIC\nVER,1\nFMAT,2\nT01C{:.3f}F042B423S6H2000\n'.format(
                         globalconfig.LONGHOLEDIAMETER))  # 内部通孔
@@ -841,21 +865,20 @@ class Feilin_dxfpolyline():
 
         layerholepairdict = {}
         for count, layer in enumerate(feilin_list):
+            # 一字排开：所有图层沿 X 方向排在同一水平行
+            slot_x = 1.5 * globalconfig.X_LENGTH * count
+            slot_y = 0.0
             layerdataset = datasetjustcopy(
-                polylinedatasetdict[layer], 1, 1, 1.5 * globalconfig.X_LENGTH * (
-                    count %
-                    2), 1.5 * globalconfig.Y_LENGTH * (
-                    count / 2))
+                polylinedatasetdict[layer], 1, 1, slot_x, slot_y)
             holedataset = []
             outlinedataset = datasetjustcopy(
-                polylinedatasetdict["Outline"], 1, 1, 1.5 * globalconfig.X_LENGTH * (
-                    count %
-                    2), 1.5 * globalconfig.Y_LENGTH * (
-                    count / 2))
+                polylinedatasetdict["Outline"], 1, 1, slot_x, slot_y)
             if layer in list(
                     globalconfig.layerholepairdictlist_actual[blockcount].keys()):
-                holedataset = datasetjustcopy(polylinedatasetdict[globalconfig.layerholepairdictlist_actual[blockcount][layer]],
-                                              1, 1, 1.5 * globalconfig.X_LENGTH * (count % 2), 1.5 * globalconfig.Y_LENGTH * (count / 2))
+                holedataset = datasetjustcopy(
+                    polylinedatasetdict[
+                        globalconfig.layerholepairdictlist_actual[blockcount][layer]],
+                    1, 1, slot_x, slot_y)
                 if "Outline" in list(layerholepairdict.keys()):
                     layerholepairdict["Outline"].extend(outlinedataset)
                 else:
@@ -874,16 +897,12 @@ class Feilin_dxfpolyline():
 
                 notepointdict[layer +
                               '-' +
-                              globalconfig.layerholepairdictlist_actual[blockcount][layer]] = [1.5 *
-                                                                                               (count %
-                                                                                                2) *
-                                                                                               globalconfig.X_LENGTH -
-                                                                                               0.5 *
-                                                                                               globalconfig.X_LENGTH, (1.5 *
-                                                                                                                       (count /
-                                                                                                                        2) -
-                                                                                                                       0.875) *
-                                                                                               globalconfig.Y_LENGTH]
+                              globalconfig.layerholepairdictlist_actual[blockcount][layer]] = [
+                                  slot_x -
+                                  0.5 *
+                                  globalconfig.X_LENGTH,
+                                  -0.875 *
+                                  globalconfig.Y_LENGTH]
             else:
                 if "Outline" in list(layerholepairdict.keys()):
                     layerholepairdict["Outline"].extend(outlinedataset)
@@ -893,23 +912,22 @@ class Feilin_dxfpolyline():
                     layerholepairdict[layer].extend(layerdataset)
                 else:
                     layerholepairdict[layer] = layerdataset
-                notepointdict[layer] = [1.5 *
-                                        (count %
-                                         2) *
-                                        globalconfig.X_LENGTH -
-                                        0.5 *
-                                        globalconfig.X_LENGTH, (1.5 *
-                                                                (count /
-                                                                 2) -
-                                                                0.875) *
-                                        globalconfig.Y_LENGTH]
+                notepointdict[layer] = [
+                    slot_x -
+                    0.5 *
+                    globalconfig.X_LENGTH,
+                    -0.875 *
+                    globalconfig.Y_LENGTH]
 
         return layerholepairdict, notepointdict
 
-    def outputfeilininfo(self):
+    def outputfeilininfo(self, output_dir=None):
         """
         """
-        info = open(globalconfig.NAME_OF_FEILIN + '菲林说明文件' + '.txt', 'w')
+        filename = globalconfig.NAME_OF_FEILIN + '菲林说明文件' + '.txt'
+        if output_dir:
+            filename = os.path.join(output_dir, filename)
+        info = open(filename, 'w')
         info.write(globalconfig.NAME_OF_FEILIN + "丝网设计转化报告\n")
         info.write(
             "转化时间:    " +
@@ -1356,11 +1374,11 @@ def buildringlist():
                 [[-globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   globalconfig.FIFTH_RING_OFFSET + globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
-                  globalconfig.FIFTH_RING_OFFSET + globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET]],
+                    globalconfig.FIFTH_RING_OFFSET + globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET]],
                 [[globalconfig.RING_DISTANCE - globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   0.0 + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_DISTANCE + globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
-                  0.0 + globalconfig.CUTLINE_Y_OFFSET]],
+                    0.0 + globalconfig.CUTLINE_Y_OFFSET]],
                 [[globalconfig.RING_DISTANCE - globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
                   globalconfig.RING_DISTANCE + globalconfig.CUTLINE_Y_OFFSET],
                  [globalconfig.RING_DISTANCE + globalconfig.RING_RADIUS + globalconfig.CUTLINE_X_OFFSET,
@@ -2563,7 +2581,7 @@ def _shengxiong_mode2(drawing, centerposlist, holelayer):
                     layer='PET'))
 
 
-def generate_shengxiong_film(block, holelayer, centerposlist):
+def generate_shengxiong_film(block, holelayer, centerposlist, output_dir=None):
     """生成并保存单个通孔层的盛雄开孔 DXF 文件（按 SHENGXIONG_MODE）。"""
     drawing = Drawing()
     drawing.blocks.append(block)
@@ -2577,12 +2595,132 @@ def generate_shengxiong_film(block, holelayer, centerposlist):
                 center=ring,
                 radius=globalconfig.RING_RADIUS / 2,
                 layer='0'))
-    drawing.saveas(
+    filename = (
         globalconfig.NAME_OF_FEILIN +
         '-' +
         holelayer +
         '(盛雄开孔模式)' +
         '.dxf')
+    if output_dir:
+        filename = os.path.join(output_dir, filename)
+    drawing.saveas(filename)
+
+
+def build_ldi_frame():
+    """Build the 200x200 square frame centered on the film panel center."""
+    center_x = globalconfig.CUTLINE_X_OFFSET + globalconfig.RING_DISTANCE / 2
+    center_y = globalconfig.CUTLINE_Y_OFFSET + globalconfig.RING_DISTANCE / 2
+    half = 100.0
+    return [
+        [center_x - half, center_y + half, 0],
+        [center_x + half, center_y + half, 0],
+        [center_x + half, center_y - half, 0],
+        [center_x - half, center_y - half, 0],
+    ]
+
+
+def _ldi_new_drawing(block):
+    """Create an LDI Drawing with the shared cutline-endpoint block."""
+    drawing = Drawing()
+    drawing.blocks.append(block)
+    drawing.styles.append(Style())
+    drawing.views.append(View('Normal'))
+    return drawing
+
+
+def _ldi_row_step():
+    """Y offset between adjacent arrayed rows."""
+    return globalconfig.Y_LENGTH / globalconfig.Y_OUTLINE_RATIO
+
+
+def _ldi_block_rows(block_y_count):
+    """Additional row copies needed to fill this block's Y span."""
+    return max(0, globalconfig.eachblock_y_list[block_y_count] - 1)
+
+
+def _array_full_centers(centers, block_y_count):
+    """Return centers plus upward row copies to fill the block's Y span."""
+    step = _ldi_row_step()
+    rows = _ldi_block_rows(block_y_count)
+    full = list(centers)
+    for row in range(1, rows + 1):
+        offset = step * row
+        full.extend(
+            [[center[0], center[1] + offset] for center in centers])
+    return full
+
+
+def _append_ldi_pattern(drawing, layer, polylines, block_y_count):
+    """Append one band of layer patterns plus upward row copies (array-full)."""
+    step = _ldi_row_step()
+    rows = _ldi_block_rows(block_y_count)
+    for polyline in polylines:
+        drawing.append(
+            PolyLine(points=polyline, layer=layer, flag=1))
+        for row in range(1, rows + 1):
+            copy = datasetjustcopy(
+                [polyline], 1, 1, 0, step * row)[0]
+            drawing.append(
+                PolyLine(points=copy, layer=layer, flag=1))
+
+
+def _append_ldi_pads(drawing, layer, centers, block_y_count):
+    """Append one band of PAD circles plus upward row copies."""
+    radius = globalconfig.PADDIAMETER / 2
+    for center in _array_full_centers(centers, block_y_count):
+        drawing.append(Circle(center=center, radius=radius, layer=layer))
+
+
+def _finalize_ldi_layer(drawing, layer, ldi_dir):
+    """Add rings/cutlines/crosses/NAME text/frame and save one LDI layer file."""
+    for ring in buildringlist():
+        drawing.append(
+            PolyPad(
+                points=ring,
+                layer=layer,
+                flag=1,
+                width=globalconfig.RING_WIDTH))
+    for cutline in buildcutlineset():
+        drawing.append(
+            PolyLine(
+                points=cutline,
+                layer=layer,
+                flag=1,
+                width=globalconfig.CUTLINE_WIDTH))
+    for flash in buildflashlist():
+        drawing.append(
+            Insert(
+                layer=layer,
+                name='cutlineendpoint',
+                point=flash))
+    if layer.capitalize()[0] == 'P' or layer.capitalize()[0] == 'H':
+        title_height_offset = 5.5
+    else:
+        title_height_offset = 8.5
+    drawing.append(
+        Text(
+            layer=layer,
+            text=globalconfig.NAME_OF_FEILIN + '-' + layer,
+            point=(
+                globalconfig.RING_DISTANCE / 2 -
+                len(globalconfig.NAME_OF_FEILIN) * 1.5 / 2 +
+                globalconfig.CUTLINE_X_OFFSET,
+                title_height_offset +
+                globalconfig.RING_DISTANCE +
+                globalconfig.CUTLINE_Y_OFFSET),
+            height=1.5))
+    drawing.append(
+        PolyLine(
+            points=build_ldi_frame(),
+            layer=layer,
+            flag=1,
+            width=1))
+    drawing.layers.append(Layer(name='0', color=7))
+    drawing.layers.append(Layer(name=layer, color=7))
+    drawing.saveas(
+        os.path.join(
+            ldi_dir,
+            globalconfig.NAME_OF_FEILIN + '-' + layer + '.dxf'))
 
 
 def main(workdir=None, config_path=None):
@@ -2638,6 +2776,21 @@ def _run_film_generation(workdir):
         print("dict no. is not equal to config.ini setting!!!")
         return 0
 
+    # 输出目录：菲林 / 开孔模式 / LDI
+    film_dir = os.path.join(workdir, '菲林')
+    hole_mode_dir = os.path.join(workdir, '开孔模式')
+    os.makedirs(film_dir, exist_ok=True)
+    os.makedirs(hole_mode_dir, exist_ok=True)
+
+    ldi_enabled = bool(globalconfig.LDI_ENABLED)
+    ldi_dir = os.path.join(workdir, 'LDI')
+    ldi_drawings = {}
+    if ldi_enabled:
+        os.makedirs(ldi_dir, exist_ok=True)
+
+    # 盛雄开孔：按区块收集各通孔层一行带的中心点（用于满阵列）
+    sx_band_centers = {}
+
     # 检查MARK大小
     # if globalconfig.MARK_HEIGHT<0.70:
        # print("MARK height is less than 0.70,plz adjust mark height!!!")
@@ -2659,6 +2812,13 @@ def _run_film_generation(workdir):
         #    return 0
         eachrationumlist, holepolylinedict, feilinpolylinedict = feilin_dxfpolyline.createnewblock(
             blockname, blockcount, dirdict[blockname])
+        # 收集该区块的通孔层中心点（一行带）
+        block_y_count = blockcount // globalconfig.BLOCK_X_NUM
+        for holelayer in holepolylinedict:
+            sx_band_centers.setdefault(holelayer, []).append((
+                feilinhole.calculateholecenterposlist(
+                    holepolylinedict[holelayer]),
+                block_y_count))
         for feilinlayer in feilinpolylinedict:  # 遍历字典
             for polyline in feilinpolylinedict[feilinlayer]:  # 遍历字典值，即多段线列表
                 feilin.append(
@@ -2666,6 +2826,19 @@ def _run_film_generation(workdir):
                         points=polyline,
                         layer=feilinlayer,
                         flag=1))
+
+        # LDI：按金属层收集“带”并向上阵列满
+        if ldi_enabled:
+            for feilinlayer in feilinpolylinedict:
+                if feilinlayer == 'Outline':
+                    continue
+                if feilinlayer not in ldi_drawings:
+                    ldi_drawings[feilinlayer] = _ldi_new_drawing(b)
+                _append_ldi_pattern(
+                    ldi_drawings[feilinlayer],
+                    feilinlayer,
+                    feilinpolylinedict[feilinlayer],
+                    block_y_count)
 
         if globalconfig.DRAWHOLE:
             for holelayer in holepolylinedict:
@@ -2677,18 +2850,35 @@ def _run_film_generation(workdir):
                             flag=1))
 
         if globalconfig.DRAWPAD:
+            block_pad_centers = {}
             for holelayer in globalconfig.holepadpairdictlist[blockcount]:
                 if holelayer in list(holepolylinedict.keys()):
                     if globalconfig.holepadpairdictlist[blockcount][holelayer] not in feilin_dxfpolyline.feilin_list:
                         feilin_dxfpolyline.feilin_list.append(
                             globalconfig.holepadpairdictlist[blockcount][holelayer])
-                    for centerpos in feilinhole.calculateholecenterposlist(
-                            holepolylinedict[holelayer]):
+                    pad_centers = feilinhole.calculateholecenterposlist(
+                        holepolylinedict[holelayer])
+                    for centerpos in pad_centers:
                         feilin.append(
                             Circle(
                                 center=centerpos,
                                 radius=globalconfig.PADDIAMETER / 2,
                                 layer=globalconfig.holepadpairdictlist[blockcount][holelayer]))
+                    if ldi_enabled:
+                        pad_layer = globalconfig.holepadpairdictlist[blockcount][holelayer]
+                        block_pad_centers.setdefault(pad_layer, []).extend(
+                            pad_centers)
+            # LDI：PAD 层同样向上阵列满
+            if ldi_enabled:
+                block_y_count = blockcount // globalconfig.BLOCK_X_NUM
+                for pad_layer, pad_centers in block_pad_centers.items():
+                    if pad_layer not in ldi_drawings:
+                        ldi_drawings[pad_layer] = _ldi_new_drawing(b)
+                    _append_ldi_pads(
+                        ldi_drawings[pad_layer],
+                        pad_layer,
+                        pad_centers,
+                        block_y_count)
 
         # 绘制菲林MARK
         markpointlistdict = buildmarkpointlist(eachrationumlist, blockcount)
@@ -2733,7 +2923,11 @@ def _run_film_generation(workdir):
                     height=0.25 *
                     globalconfig.Y_LENGTH,
                     rotation=0))
-        layerholedxf.saveas(str(blockname) + '.dxf')
+        layerholedxf.saveas(
+            os.path.join(
+                film_dir,
+                globalconfig.NAME_OF_FEILIN + '总图' + str(blockname) + '.dxf'))
+    
 
     # 给菲林图层上色
     layercolordict = {}
@@ -2786,14 +2980,25 @@ def _run_film_generation(workdir):
                     # longholedxf.append(PolyLine(points=cutline,layer=holelayer,flag=1,width=globalconfig.CUTLINE_WIDTH))
                 # for flash in buildflashlist():
                     # longholedxf.append(Insert(layer=holelayer,name='cutlineendpoint',point=flash))
-        longholedxf.saveas(globalconfig.NAME_OF_FEILIN + '(长通孔)' + '.dxf')
+        longholedxf.saveas(
+            os.path.join(
+                film_dir,
+                globalconfig.NAME_OF_FEILIN + '(长通孔)' + '.dxf'))
 
     # 绘制盛雄开孔机用的菲林
-    for holelayer in holepolylinedict:
+    for holelayer in sx_band_centers:
+        centers = []
+        for band_centers, block_y_count in sx_band_centers[holelayer]:
+            if globalconfig.SHENGXIONG_ARRAY_FULL:
+                centers.extend(
+                    _array_full_centers(band_centers, block_y_count))
+            else:
+                centers.extend(band_centers)
         generate_shengxiong_film(
             b,
             holelayer,
-            feilinhole.calculaterlongholecenterposlist(holelayer))
+            centers,
+            hole_mode_dir)
 
     # 绘制切割线,菲林名称,定位圆环,十字架
     for feilin_layer in feilin_dxfpolyline.feilin_list:
@@ -2889,15 +3094,24 @@ def _run_film_generation(workdir):
                 0),
             height=1.5))
 
+    # 输出 LDI 分图层文件
+    if ldi_enabled:
+        for ldi_layer in ldi_drawings:
+            _finalize_ldi_layer(
+                ldi_drawings[ldi_layer], ldi_layer, ldi_dir)
+
     # 绘制所有菲林图案
-    feilin.saveas(globalconfig.NAME_OF_FEILIN + '(总菲林)' + '.dxf')
+    feilin.saveas(
+        os.path.join(
+            film_dir,
+            globalconfig.NAME_OF_FEILIN + '(总菲林)' + '.dxf'))
     # 输出菲林信息文件
-    feilin_dxfpolyline.outputfeilininfo()
+    feilin_dxfpolyline.outputfeilininfo(film_dir)
     # 输出菲林通孔坐标文件
-    feilinhole.outputholepos()
+    feilinhole.outputholepos(film_dir)
     # 输出长通孔坐标文件
     if globalconfig.DRAWLONGHOLE:
-        feilinhole.outputlongholepos()
+        feilinhole.outputlongholepos(film_dir)
 
 
 if __name__ == '__main__':

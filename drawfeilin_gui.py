@@ -245,6 +245,8 @@ OPTION_TYPES = {
     '通孔孔径最大值': 'float',
     '拼网列分割数': 'int',
     '拼网行分割数': 'int',
+    '是否输出LDI': 'bool',
+    '是否开孔阵列满': 'bool',
     '是否绘制通孔层': 'bool',
     '是否绘制长通孔DXF文件': 'bool',
     '根据通孔绘制PAD': 'bool',
@@ -253,6 +255,17 @@ OPTION_TYPES = {
     '是否切割线内缩': 'bool',
     '长通孔模式是否镜像': 'bool',
 }
+
+
+def _option_type(name):
+    """按配置存储名查询控件类型（兼容 configparser 对 ASCII 的小写化）。"""
+    if name in OPTION_TYPES:
+        return OPTION_TYPES[name]
+    lowered = name.lower()
+    for key, value in OPTION_TYPES.items():
+        if key.lower() == lowered:
+            return value
+    return None
 
 
 def read_ini(path):
@@ -295,7 +308,7 @@ def validate_config(data):
     errors = []
     for section, options in data.items():
         for option, value in options.items():
-            option_type = OPTION_TYPES.get(option, 'text')
+            option_type = _option_type(option) or 'text'
             error = validate_option(option, value, option_type)
             if error:
                 errors.append((section, option, error))
@@ -575,7 +588,7 @@ class App(object):
         for row, (option, value) in enumerate(options.items()):
             ttk.Label(inner, text=option).grid(
                 row=row, column=0, sticky='w', padx=6, pady=3)
-            option_type = OPTION_TYPES.get(option, 'text')
+            option_type = _option_type(option) or 'text'
             if option_type == 'bool':
                 var = tk.StringVar(value=value)
                 box = ttk.Combobox(
