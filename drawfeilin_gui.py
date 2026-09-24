@@ -1383,7 +1383,7 @@ class App(object):
                 return
             overrides = {
                 '层序方向': direction_var.get().strip(),
-                '切片Z基准': base_var.get().strip(),
+                '切片Z基准': base_var.get().strip() or None,
                 '覆盖前备份': 'Yes' if backup_var.get() else 'No',
             }
             try:

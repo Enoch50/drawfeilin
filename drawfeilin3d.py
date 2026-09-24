@@ -132,7 +132,10 @@ def read_slice_options(config_path=None, overrides=None):
                     raw[name] = str(value).strip()
     for key, value in (overrides or {}).items():
         name = _match_config_key(key) or key
-        if value is not None and str(value).strip() != '':
+        if value is None:
+            # 显式传 None 表示在界面上被清空（例如“切片Z基准”留空）
+            raw[name] = ''
+        elif str(value).strip() != '':
             raw[name] = str(value).strip()
 
     def _as_float(name, minimum=None):
