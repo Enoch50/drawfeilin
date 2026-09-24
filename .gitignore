@@ -6,6 +6,8 @@
 /.gitignore
 
 /__pycache__/
+__pycache__/
+*.pyc
 /dist/
 /build/
 /*.spec
