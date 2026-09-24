@@ -37,6 +37,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import drawfeilin  # noqa: E402
 
+try:
+    import drawfeilin3d  # noqa: E402
+except Exception:  # pragma: no cover - 缺依赖时隐藏 3D 切片入口
+    drawfeilin3d = None
+
 
 # ============================================================================
 # 路径工具（区分开发环境与打包后的 exe）
@@ -269,6 +274,16 @@ OPTION_TYPES = {
     '是否镜像图层': 'bool',
     '是否切割线内缩': 'bool',
     '长通孔模式是否镜像': 'bool',
+    # [3D切片] 段（3D 模型 -> 每层图案 DXF）
+    '模型单位': 'mm|cm|m|inch|mil|um',
+    '切片采样容差': 'float',
+    '通孔直径下限': 'float',
+    '通孔直径上限': 'float',
+    '近圆判定长宽比': 'float',
+    '圆度下限': 'float',
+    '层序方向': '自上而下|自下而上',
+    '切片Z基准': 'float',
+    '覆盖前备份': 'bool',
 }
 
 
@@ -597,6 +612,9 @@ class App(object):
         self.import_table_button = ttk.Button(
             controls, text='导入成型参数表…', command=self._choose_form_table)
         self.import_table_button.pack(side='left', padx=(0, 6))
+        self.slice_button = ttk.Button(
+            controls, text='3D切片…', command=self._on_slice_3d)
+        self.slice_button.pack(side='left', padx=(0, 6))
         self.rules_button = ttk.Button(
             controls, text='设计规则检查', command=self._on_check_rules)
         self.rules_button.pack(side='left', padx=(0, 6))
@@ -697,9 +715,33 @@ class App(object):
                 'Excel 中找不到 层数名称/通孔模式（或旧表头 '
                 '丝网号/通孔模式说明）表头。')
 
+        # 3D 切片用的可选列（老版表格没有这些列时行为完全不变）
+        optional_names = ('膜厚', '烧结后厚度', '厚度(mm)', '切片Z(mm)', '层类型')
+        optional_cols = {}
+        for col, cell in enumerate(sheet_rows[header_row]):
+            text = '' if cell is None else str(cell).strip()
+            if text in optional_names and text not in optional_cols:
+                optional_cols[text] = col
+
+        def cell_value(row, name):
+            col = optional_cols.get(name)
+            if col is None or col >= len(row):
+                return None
+            return row[col]
+
+        def cell_float(row, name):
+            value = cell_value(row, name)
+            if value is None or str(value).strip() == '':
+                return None
+            try:
+                return float(str(value).strip())
+            except ValueError:
+                return None
+
         order = []
         pairs = {}
         layout_rows = []
+        stack = []
         for row in sheet_rows[header_row + 1:]:
             if col_layer >= len(row):
                 continue
@@ -716,10 +758,20 @@ class App(object):
             hole = None if mode in ('4H', '5H', '') else mode
             pairs[layer] = hole
             layout_rows.append((layer, hole))
+            kind = cell_value(row, '层类型')
+            stack.append({
+                'name': layer,
+                'hole': hole or '',
+                'z': cell_float(row, '切片Z(mm)'),
+                'thickness_mm': cell_float(row, '厚度(mm)'),
+                '烧结后厚度': cell_float(row, '烧结后厚度'),
+                '膜厚': cell_float(row, '膜厚'),
+                '层类型': '' if kind is None else str(kind).strip(),
+            })
         if not order:
             raise ValueError('“成型参数信息填写表”中没有可用的丝网号行。')
         return {'order': order, 'pairs': pairs,
-                'rows': layout_rows, 'count': len(order)}
+                'rows': layout_rows, 'count': len(order), 'stack': stack}
 
     def _choose_form_table(self):
         if openpyxl is None:
@@ -1222,6 +1274,167 @@ class App(object):
             daemon=True)
         thread.start()
 
+    # ------------------------------------------------------------ 3D 切片
+
+    def _on_slice_3d(self):
+        """打开“3D 模型 → 每层图案 DXF”对话框。"""
+        if drawfeilin3d is None:
+            messagebox.showerror(
+                '无法使用 3D 切片',
+                '缺少 drawfeilin3d 模块或其依赖（trimesh / shapely）。\n'
+                '请先安装：pip install trimesh shapely')
+            return
+        preflight = self._preflight()
+        if preflight is None:
+            return
+        workdir, config_path = preflight
+        if not self.form_layout or not self.form_layout.get('stack'):
+            messagebox.showwarning(
+                '缺少层栈定义',
+                '3D 切片需要成型参数表提供层栈'
+                '（层数名称 / 通孔模式，以及层厚或切片Z）。\n'
+                '请先点“导入成型参数表…”。')
+            return
+        try:
+            options = drawfeilin3d.read_slice_options(config_path)
+        except Exception as exc:  # noqa: BLE001 - 需要中文提示
+            messagebox.showerror('配置有误', str(exc))
+            return
+        self._open_slice_dialog(workdir, config_path, options)
+
+    def _open_slice_dialog(self, workdir, config_path, options):
+        """3D 切片参数对话框：模型文件、目标区块、层序方向、Z 基准、备份。"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title('3D 模型切片 → 分层 DXF')
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+
+        frame = ttk.Frame(dialog, padding=10)
+        frame.pack(fill='both', expand=True)
+
+        block_dirs = sorted(
+            [name for name in os.listdir(workdir)
+             if os.path.isdir(os.path.join(workdir, name))
+             and name.isdigit()],
+            key=lambda text: int(text))
+        model_var = tk.StringVar()
+        block_var = tk.StringVar(value=block_dirs[0] if block_dirs else '1')
+        direction_var = tk.StringVar(value=options['层序方向'])
+        base_var = tk.StringVar(
+            value='' if options['切片Z基准'] is None
+            else ('%g' % options['切片Z基准']))
+        backup_var = tk.BooleanVar(value=bool(options['覆盖前备份']))
+
+        def choose_model():
+            selected = filedialog.askopenfilename(
+                title='选择 3D 模型文件',
+                initialdir=workdir,
+                filetypes=[
+                    ('3D 网格模型', '*.stl;*.obj;*.ply;*.off;*.glb;*.3mf'),
+                    ('STL', '*.stl'), ('所有文件', '*.*')])
+            if selected:
+                model_var.set(selected)
+
+        ttk.Label(frame, text='3D 模型文件:').grid(
+            row=0, column=0, sticky='w', pady=4)
+        ttk.Entry(frame, textvariable=model_var, width=52).grid(
+            row=0, column=1, sticky='we', pady=4)
+        ttk.Button(frame, text='浏览…', command=choose_model).grid(
+            row=0, column=2, padx=(6, 0), pady=4)
+
+        ttk.Label(frame, text='目标区块号:').grid(
+            row=1, column=0, sticky='w', pady=4)
+        ttk.Combobox(
+            frame, textvariable=block_var, width=8, state='readonly',
+            values=block_dirs or ['1']).grid(
+            row=1, column=1, sticky='w', pady=4)
+
+        ttk.Label(frame, text='层序方向:').grid(
+            row=2, column=0, sticky='w', pady=4)
+        ttk.Combobox(
+            frame, textvariable=direction_var, width=10, state='readonly',
+            values=['自上而下', '自下而上']).grid(
+            row=2, column=1, sticky='w', pady=4)
+
+        ttk.Label(frame, text='切片Z基准(mm):').grid(
+            row=3, column=0, sticky='w', pady=4)
+        ttk.Entry(frame, textvariable=base_var, width=12).grid(
+            row=3, column=1, sticky='w', pady=4)
+        ttk.Label(
+            frame, foreground='gray',
+            text='留空 = 自上而下取模型顶面、自下而上取模型底面'
+        ).grid(row=3, column=2, sticky='w', padx=(6, 0))
+
+        ttk.Checkbutton(
+            frame, text='覆盖原区块目录前先整体备份',
+            variable=backup_var).grid(
+            row=4, column=1, sticky='w', pady=4)
+
+        ttk.Label(
+            frame, foreground='gray', justify='left',
+            text='层栈来自成型参数表：图案层写闭合多段线，通孔层写圆；\n'
+                 '每层都会写入产品设计尺寸外框，坐标以外框中心为原点。'
+        ).grid(row=5, column=0, columnspan=3, sticky='w', pady=(6, 0))
+
+        def start():
+            model_path = model_var.get().strip()
+            if not os.path.isfile(model_path):
+                messagebox.showwarning('模型文件不存在', model_path)
+                return
+            overrides = {
+                '层序方向': direction_var.get().strip(),
+                '切片Z基准': base_var.get().strip(),
+                '覆盖前备份': 'Yes' if backup_var.get() else 'No',
+            }
+            try:
+                resolved = drawfeilin3d.read_slice_options(
+                    config_path, overrides)
+            except Exception as exc:  # noqa: BLE001 - 需要中文提示
+                messagebox.showerror('参数有误', str(exc))
+                return
+            dialog.destroy()
+            self._log('=' * 50)
+            self._log('3D 模型切片 → 分层 DXF ...')
+            self._log('3D 模型: %s' % model_path)
+            self._log('目标区块: %s' % block_var.get().strip())
+            self._set_running(True)
+            threading.Thread(
+                target=self._run_slice_worker,
+                args=(workdir, config_path, model_path,
+                      block_var.get().strip(), resolved, self.form_layout),
+                daemon=True).start()
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=6, column=0, columnspan=3, sticky='e', pady=(10, 0))
+        ttk.Button(buttons, text='开始切片', command=start).pack(
+            side='left', padx=(0, 6))
+        ttk.Button(buttons, text='取消', command=dialog.destroy).pack(
+            side='left')
+
+    def _run_slice_worker(self, workdir, config_path, model_path, block,
+                          options, layout):
+        """后台执行 3D 切片，结果通过日志队列回传。"""
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        writer = QueueWriter(self.log_queue)
+        sys.stdout = writer
+        sys.stderr = writer
+        try:
+            report = drawfeilin3d.slice_block_to_workdir(
+                model_path=model_path, workdir=workdir, block=block,
+                form_layout=layout, config_path=config_path,
+                options=options, log=print)
+            outputs = [os.path.relpath(path, workdir)
+                       for path in report.get('files', [])]
+            self.log_queue.put(('slice_done', (outputs, report)))
+        except Exception as exc:
+            if isinstance(exc, drawfeilin3d.Slice3DError):
+                self.log_queue.put(('slice_error', str(exc)))
+            else:
+                self.log_queue.put(('error', traceback.format_exc()))
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
     def _preflight(self):
         """公共运行前校验；通过返回 (workdir, config_path)，否则返回 None。"""
         if self.running:
@@ -1373,6 +1586,7 @@ class App(object):
         self.preview_button.configure(state=state)
         self.edit_button.configure(state=state)
         self.import_table_button.configure(state=state)
+        self.slice_button.configure(state=state)
         self.rules_button.configure(state=state)
         self.open_dir_button.configure(state=state)
         if running:
@@ -1458,6 +1672,30 @@ class App(object):
                     self.status_var.set('运行出错，见日志')
                     self._log(payload)
                     messagebox.showerror('运行出错', '见运行日志中的详细信息。')
+                elif kind == 'slice_done':
+                    outputs, report = payload
+                    self._set_running(False)
+                    if outputs:
+                        self._set_output_files(outputs)
+                    self.status_var.set(
+                        '3D 切片完成，共 %d 个图层 DXF' % len(outputs))
+                    self._log('3D 切片完成，共 %d 个图层 DXF:' % len(outputs))
+                    for name in outputs:
+                        self._log('  - ' + name)
+                    backup = report.get('backup')
+                    if backup:
+                        self._log('原区块目录已备份到: %s' % os.path.relpath(
+                            backup, self.workdir_var.get().strip()))
+                    for text in report.get('warnings') or []:
+                        self._log('提示: %s' % text)
+                    self._log(
+                        '下一步：可“输出总图”校对排图，'
+                        '或“生成编辑用总图”后在 CAD 中修改。')
+                elif kind == 'slice_error':
+                    self._set_running(False)
+                    self.status_var.set('3D 切片中止，见日志')
+                    self._log(payload)
+                    messagebox.showwarning('3D 切片中止', payload)
         except queue.Empty:
             pass
         self.root.after(100, self._poll_queue)
