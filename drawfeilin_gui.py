@@ -372,8 +372,13 @@ def _in_keys(option, key_list):
 
 
 def read_ini(path):
-    """读取 utf-8-sig 编码的 INI 文件，返回 {区块: {选项: 值}}。"""
+    """读取 utf-8-sig 编码的 INI 文件，返回 {区块: {选项: 值}}。
+
+    optionxform 设为原样保留，避免 configparser 默认把 ASCII 键名小写化
+    （如 `MARK旋转角度` -> `mark旋转角度`），造成保存配置后出现无意义 diff。
+    """
     parser = configparser.ConfigParser()
+    parser.optionxform = str
     with open(path, 'r', encoding='utf-8-sig') as f:
         parser.read_file(f)
     result = {}
@@ -418,15 +423,38 @@ def validate_config(data):
     return errors
 
 
+def _existing_section_order(path):
+    """读取磁盘上现有的节顺序（用于写回时保持原顺序）。"""
+    try:
+        with open(path, 'r', encoding='utf-8-sig') as handle:
+            text = handle.read()
+    except OSError:
+        return []
+    return [name.strip() for name in re.findall(r'^\[([^\]]+)\]', text, re.M)]
+
+
 def write_ini(path, data):
-    """以 utf-8-sig 写回 INI（覆盖前生成 .bak 备份）。"""
+    """以 utf-8-sig 写回 INI（覆盖前生成 .bak 备份）。
+
+    保持文件原有的节顺序与键名大小写：界面上的页签顺序与 config.ini 的
+    书写顺序可以不同，保存配置不应因此重排文件或改写键名。
+    """
     try:
         shutil.copy2(path, path + '.bak')
     except OSError:
         pass  # 备份失败不阻止保存
+    order = ['DEFAULT']
+    for name in _existing_section_order(path):
+        if name != 'DEFAULT' and name not in order:
+            order.append(name)
+    for name in data:
+        if name not in order:
+            order.append(name)
     parser = configparser.ConfigParser()
-    for section, options in data.items():
-        parser[section] = options
+    parser.optionxform = str
+    for name in order:
+        if name in data:
+            parser[name] = data[name]
     with open(path, 'w', encoding='utf-8-sig', newline='\r\n') as f:
         parser.write(f)
 
