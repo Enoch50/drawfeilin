@@ -27,6 +27,11 @@ import tempfile
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+try:
+    import openpyxl
+except Exception:  # pragma: no cover - 运行环境缺依赖时提示
+    openpyxl = None
+
 # 保证无论从哪个目录启动都能找到同目录下的核心模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -241,12 +246,22 @@ OPTION_TYPES = {
     'MARK文字高度': 'float',
     '通孔孔径': 'float',
     'PAD孔径': 'float',
+    '点网孔径': 'float',
+    '假引孔阈值': 'float',
+    '定位孔孔径': 'float',
     '长通孔孔径': 'float',
-    '通孔孔径最大值': 'float',
     '拼网列分割数': 'int',
     '拼网行分割数': 'int',
     '是否输出LDI': 'bool',
     '是否开孔阵列满': 'bool',
+    '是否旋转90度': 'bool',
+    '90度旋转方向': '逆时针|顺时针',
+    '图案来源': '原图|编辑总图',
+    '通孔层是否增加点网': 'bool',
+    '是否引出端增绘': 'bool',
+    '是否启用': 'bool',
+    '默认最小间距': 'float',
+    '默认最小留边量': 'float',
     '是否绘制通孔层': 'bool',
     '是否绘制长通孔DXF文件': 'bool',
     '根据通孔绘制PAD': 'bool',
@@ -266,6 +281,79 @@ def _option_type(name):
         if key.lower() == lowered:
             return value
     return None
+
+
+# “全局设置”页签字段（大小写不敏感匹配，兼容 configparser 小写化）
+GLOBAL_SETTING_KEYS = [
+    '图案全局缩放比例',
+    '图案原点X坐标',
+    '图案原点Y坐标',
+    '切割线x方向偏移距离',
+    '切割线y方向偏移距离',
+    '菲林英寸',
+    '不做多种放缩的图层',
+]
+
+# “通孔”页签字段
+HOLE_SETTING_KEYS = [
+    '是否绘制通孔层',
+    '根据通孔绘制PAD',
+    '通孔孔径',
+    'PAD孔径',
+    '点网孔径',
+    '假引孔阈值',
+    '定位孔孔径',
+]
+
+# 属于 DEFAULT 但归“长通孔”页签展示的字段
+LONGHOLE_DEFAULT_KEYS = [
+    '是否绘制长通孔DXF文件',
+]
+
+# 不在界面显示、也不写回配置的字段（功能已停用或改由成型参数表提供）
+HIDDEN_DEFAULT_KEYS = [
+    '假引孔孔径',
+    '引出端绘制长度',
+    '引出端绘制宽度',
+]
+
+# 拼网区块页签不再显示的字段（仍可由 config.ini 手工配置，核心保留读取）
+BLOCK_HIDDEN_FIELDS = [
+    '需要做xy方向延伸的图层',
+    '图层与通孔配对(实际)',
+    '需要绘制假引的图层',
+    '绘制假引孔的图层',
+]
+
+# “MARK设置”页签字段
+MARK_SETTING_KEYS = [
+    'MARK旋转角度',
+    'MARK的X方向偏移',
+    'MARK的Y方向偏移',
+    'MARK文字高度',
+    'MARK标识',
+    '表示放缩率的MARK标识',
+    '拼网区块x方向MARK标识',
+    '拼网区块y方向MARK标识',
+    '是否绘制MARK标识',
+]
+
+# 无 config.ini 启动时“全局设置”页签显示的内置默认值
+DEFAULT_GLOBAL_VALUES = {
+    '图案全局缩放比例': '1',
+    '图案原点X坐标': '0.0',
+    '图案原点Y坐标': '0.0',
+    '切割线x方向偏移距离': '50',
+    '切割线y方向偏移距离': '50',
+    '菲林英寸': '6',
+    '不做多种放缩的图层': 'Mark|Outline',
+}
+
+
+def _in_keys(option, key_list):
+    """大小写不敏感地判断 option 是否属于 key_list。"""
+    lowered = option.lower()
+    return any(key.lower() == lowered for key in key_list)
 
 
 def read_ini(path):
@@ -375,7 +463,11 @@ class App(object):
         self.running = False
         self.section_vars = {}
         self.data = {}
+        self.config_loaded = False
         self._output_files = []
+        # 导入的成型参数表（仅本次会话有效）：{'order': [...], 'pairs': {...}}
+        self.form_layout = None
+        self.form_layout_source = ''
 
         self._build_ui()
         self._poll_queue()
@@ -385,7 +477,18 @@ class App(object):
         default_config = os.path.join(base_dir, 'config.ini')
         if os.path.isfile(default_config):
             self.config_path_var.set(default_config)
-        self._load_config(quiet=True)
+            if not self._load_config(quiet=True):
+                self._start_without_config()
+        else:
+            self._start_without_config()
+
+    def _start_without_config(self):
+        """无 config.ini 启动：只显示“全局设置”页签并带内置默认值。"""
+        placeholder = {'DEFAULT': dict(DEFAULT_GLOBAL_VALUES)}
+        self.data = placeholder
+        self.config_loaded = False
+        self._rebuild_tabs(placeholder)
+        self.status_var.set('未加载配置文件，可手动载入')
 
     # ------------------------------------------------------------------ UI
 
@@ -418,6 +521,17 @@ class App(object):
                 value=mode,
                 variable=self.sx_mode_var,
                 command=lambda m=mode: drawfeilin.set_shengxiong_mode(m))
+
+        source_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label='图案来源', menu=source_menu)
+        self.source_menu = source_menu
+        self.pattern_source_var = tk.StringVar(value='编辑总图')
+        for mode in ('原图', '编辑总图'):
+            source_menu.add_radiobutton(
+                label=mode,
+                value=mode,
+                variable=self.pattern_source_var,
+                command=self._on_pattern_source_changed)
 
         self.root.config(menu=menubar)
 
@@ -474,6 +588,18 @@ class App(object):
         self.run_button = ttk.Button(
             controls, text='开始生成', command=self._on_run)
         self.run_button.pack(side='left', padx=(0, 6))
+        self.preview_button = ttk.Button(
+            controls, text='输出总图', command=self._on_preview)
+        self.preview_button.pack(side='left', padx=(0, 6))
+        self.edit_button = ttk.Button(
+            controls, text='生成编辑用总图', command=self._on_edit_overview)
+        self.edit_button.pack(side='left', padx=(0, 6))
+        self.import_table_button = ttk.Button(
+            controls, text='导入成型参数表…', command=self._choose_form_table)
+        self.import_table_button.pack(side='left', padx=(0, 6))
+        self.rules_button = ttk.Button(
+            controls, text='设计规则检查', command=self._on_check_rules)
+        self.rules_button.pack(side='left', padx=(0, 6))
         self.open_dir_button = ttk.Button(
             controls, text='打开输出目录', command=self._open_workdir)
         self.open_dir_button.pack(side='left', padx=(0, 12))
@@ -527,11 +653,169 @@ class App(object):
             self.config_path_var.set(selected)
             self._load_config(quiet=True)
 
+    # ------------------------------------------------------- 成型参数表导入
+
+    @staticmethod
+    def _parse_form_table(path):
+        """读取“成型参数信息填写表”，返回 {'order':[], 'pairs':{}, 'rows':n}。"""
+        if openpyxl is None:
+            raise RuntimeError('当前环境缺少 openpyxl，无法读取 xlsx 文件。')
+        workbook = openpyxl.load_workbook(
+            path, read_only=True, data_only=True)
+        # 表名不限：按顺序查找含 “层数名称/通孔模式” 表头的工作表，
+        # 兼容旧表头 “丝网号/通孔模式说明”。
+        header_pairs = (
+            ('层数名称', '通孔模式'),
+            ('丝网号', '通孔模式说明'),
+        )
+        sheet_rows = None
+        header_row = None
+        col_layer = col_mode = None
+        for sheet in workbook.worksheets:
+            rows = [tuple(r) for r in sheet.iter_rows(values_only=True)]
+            for pair in header_pairs:
+                for index, row in enumerate(rows[:5]):
+                    layer_col = mode_col = None
+                    for col, cell in enumerate(row):
+                        text = '' if cell is None else str(cell).strip()
+                        if text == pair[0] and layer_col is None:
+                            layer_col = col
+                        elif text == pair[1] and mode_col is None:
+                            mode_col = col
+                    if layer_col is not None and mode_col is not None:
+                        sheet_rows = rows
+                        header_row = index
+                        col_layer, col_mode = layer_col, mode_col
+                        break
+                if header_row is not None:
+                    break
+            if header_row is not None:
+                break
+        workbook.close()
+        if header_row is None:
+            raise ValueError(
+                'Excel 中找不到 层数名称/通孔模式（或旧表头 '
+                '丝网号/通孔模式说明）表头。')
+
+        order = []
+        pairs = {}
+        layout_rows = []
+        for row in sheet_rows[header_row + 1:]:
+            if col_layer >= len(row):
+                continue
+            layer = row[col_layer]
+            if layer is None:
+                continue
+            layer = str(layer).strip()
+            if not layer:
+                continue
+            mode = ''
+            if col_mode < len(row) and row[col_mode] is not None:
+                mode = str(row[col_mode]).strip()
+            order.append(layer)
+            hole = None if mode in ('4H', '5H', '') else mode
+            pairs[layer] = hole
+            layout_rows.append((layer, hole))
+        if not order:
+            raise ValueError('“成型参数信息填写表”中没有可用的丝网号行。')
+        return {'order': order, 'pairs': pairs,
+                'rows': layout_rows, 'count': len(order)}
+
+    def _choose_form_table(self):
+        if openpyxl is None:
+            messagebox.showerror(
+                '缺少依赖',
+                '当前程序缺少 openpyxl 库，无法读取 xlsx 成型参数表。')
+            return
+        path = filedialog.askopenfilename(
+            title='选择成型参数表（xlsx）',
+            initialdir=os.path.dirname(
+                self.config_path_var.get() or os.getcwd()),
+            filetypes=[('Excel 工作簿', '*.xlsx'), ('所有文件', '*.*')])
+        if not path:
+            return
+        try:
+            layout = self._parse_form_table(path)
+        except Exception as exc:
+            messagebox.showerror('导入失败', str(exc))
+            return
+        self.form_layout = {
+            'order': layout['order'],
+            'pairs': layout['pairs'],
+            'rows': layout['rows'],
+        }
+        self.form_layout_source = os.path.basename(path)
+        self.status_var.set(
+            '已按成型参数表排图: %s（%d 行）'
+            % (self.form_layout_source, layout['count']))
+        self._log(
+            '已导入成型参数表 %s，共 %d 行，按表格顺序/配对输出总图。'
+            % (self.form_layout_source, layout['count']))
+
+    def _config_pair_map(self, section):
+        """解析某个数字区块配置里的 图层与通孔配对(实际)。"""
+        options = self.data.get(section, {})
+        value = options.get('图层与通孔配对(实际)', '') or ''
+        result = {}
+        for group in str(value).split(','):
+            group = group.strip()
+            if not group or '|' not in group:
+                continue
+            layer, hole = group.split('|', 1)
+            result[layer.strip()] = (hole or '').strip() or None
+        return result
+
+    def _form_mismatch_lines(self):
+        """表格配对与当前配置不一致的行；没有差异返回空列表。"""
+        if not self.form_layout:
+            return []
+        workdir = self.workdir_var.get().strip()
+        if not workdir or not os.path.isdir(workdir):
+            return []
+        lines = []
+        digit_dirs = sorted(
+            name for name in os.listdir(workdir)
+            if os.path.isdir(os.path.join(workdir, name)) and name.isdigit())
+        for folder in digit_dirs:
+            if folder not in self.data:
+                continue
+            conf = self._config_pair_map(folder)
+            folder_path = os.path.join(workdir, folder)
+            files = {
+                os.path.splitext(name)[0] for name in os.listdir(folder_path)
+                if name.lower().endswith('.dxf')}
+            for layer in self.form_layout['order']:
+                if layer not in files:
+                    continue
+                table_hole = self.form_layout['pairs'].get(layer)
+                conf_hole = conf.get(layer)
+                if table_hole != conf_hole:
+                    lines.append(
+                        '区块%s 图层 %s：表格=%s，配置文件=%s'
+                        % (folder, layer,
+                           table_hole or '无配对',
+                           conf_hole or '无配对'))
+        return lines
+
+    def _warn_form_mismatch(self):
+        if not self.form_layout:
+            return
+        lines = self._form_mismatch_lines()
+        if not lines:
+            return
+        shown = lines[:20]
+        suffix = '\n…共 %d 处差异' % len(lines) if len(lines) > 20 else ''
+        messagebox.showwarning(
+            '成型参数表与配置不一致',
+            '表格中的通孔配对与配置文件不一致，仍将按表格顺序与配对生成总图：\n\n'
+            + '\n'.join(shown) + suffix)
+
     # ------------------------------------------------------------ 配置编辑
 
     def _load_config(self, quiet=False):
         path = self.config_path_var.get().strip()
         if not os.path.isfile(path):
+            self.config_loaded = False
             self.status_var.set('配置文件不存在: %s' % path)
             if not quiet:
                 messagebox.showwarning('配置文件不存在', path)
@@ -539,11 +823,28 @@ class App(object):
         try:
             data = read_ini(path)
         except Exception as exc:
+            self.config_loaded = False
             self.status_var.set('读取配置失败')
             messagebox.showerror('读取配置失败', str(exc))
             return False
+        # 旧配置缺少新增开关时，界面也显示“是否引出端增绘 = No”
+        extra = data.setdefault('EXTRA', {})
+        extra.setdefault('是否引出端增绘', 'No')
+        extra.setdefault('90度旋转方向', '逆时针')
+        extra.setdefault('通孔层是否增加点网', 'Yes')
+        extra.setdefault('图案来源', '编辑总图')
+        design = data.setdefault('设计规则', {})
+        design.setdefault('是否启用', 'Yes')
+        design.setdefault('默认最小间距', '0.1')
+        design.setdefault('默认最小留边量', '0.05')
+        design.setdefault('图层规则', '')
         self.data = data
+        self.config_loaded = True
         self._rebuild_tabs(data)
+        source = extra.get('图案来源', '编辑总图')
+        if source not in ('原图', '编辑总图'):
+            source = '编辑总图'
+        self.pattern_source_var.set(source)
         self.status_var.set('配置已加载: %s' % path)
         return True
 
@@ -556,19 +857,93 @@ class App(object):
         self.block_holder = None
 
         digit_sections = [section for section in data if section.isdigit()]
+        default_options = data.get('DEFAULT', {})
+
+        def is_in(key, key_list):
+            return _in_keys(key, key_list)
+
+        def add_tab(text, entries):
+            if entries:
+                self.notebook.add(
+                    self._build_option_form(self.notebook, entries),
+                    text=text)
+
+        # 常用页签：基础参数 / 通孔，随后是扩展参数
+        if default_options:
+            base_entries = [
+                (key, value, 'DEFAULT')
+                for key, value in default_options.items()
+                if not is_in(key, GLOBAL_SETTING_KEYS)
+                and not is_in(key, MARK_SETTING_KEYS)
+                and not is_in(key, HOLE_SETTING_KEYS)
+                and not is_in(key, LONGHOLE_DEFAULT_KEYS)
+                and not is_in(key, HIDDEN_DEFAULT_KEYS)]
+            hole_entries = [
+                (key, value, 'DEFAULT')
+                for key, value in default_options.items()
+                if is_in(key, HOLE_SETTING_KEYS)]
+            mark_entries = [
+                (key, value, 'DEFAULT')
+                for key, value in default_options.items()
+                if is_in(key, MARK_SETTING_KEYS)]
+            add_tab('基础参数', base_entries)
+            add_tab('通孔', hole_entries)
+        else:
+            mark_entries = []
+
+        # 扩展参数 + 其它未识别段（按配置顺序）
         for section, options in data.items():
-            if section.isdigit():
+            if section in ('DEFAULT', 'LONGTHROUGHHOLE', '设计规则') or \
+                    section.isdigit():
                 continue
-            frame, section_vars = self._build_section_form(
-                self.notebook, options)
-            self.section_vars[section] = section_vars
-            self.notebook.add(frame, text=_tab_title(section))
+            entries = [
+                (key, value, section) for key, value in options.items()]
+            add_tab(_tab_title(section), entries)
 
         if digit_sections:
             self._build_block_tab(data, digit_sections)
 
-    def _build_section_form(self, parent, options):
-        """在 parent 内构建一个区块的可滚动表单，返回 (frame, 选项变量字典)。"""
+        # 不常用页签后置：MARK设置 / 设计规则 / 长通孔
+        add_tab('MARK设置', mark_entries)
+        design_options = data.get('设计规则', {})
+        add_tab(
+            '设计规则',
+            [(key, value, '设计规则')
+             for key, value in design_options.items()])
+        longhole_entries = [
+            (key, value, 'LONGTHROUGHHOLE')
+            for key, value in data.get('LONGTHROUGHHOLE', {}).items()]
+        longhole_entries.extend([
+            (key, value, 'DEFAULT')
+            for key, value in default_options.items()
+            if is_in(key, LONGHOLE_DEFAULT_KEYS)])
+        add_tab('长通孔', longhole_entries)
+
+        # 全局设置移到最右侧
+        if default_options:
+            global_entries = [
+                (key, value, 'DEFAULT')
+                for key, value in default_options.items()
+                if is_in(key, GLOBAL_SETTING_KEYS)]
+            add_tab('全局设置', global_entries)
+
+        self._select_default_tab()
+
+    def _select_default_tab(self):
+        """默认激活“基础参数”页签；不存在时激活第一个。"""
+        count = self.notebook.index('end')
+        for index in range(count):
+            if self.notebook.tab(index, 'text') == '基础参数':
+                self.notebook.select(index)
+                return
+        if count > 0:
+            self.notebook.select(0)
+
+    def _build_option_form(self, parent, entries):
+        """在 parent 内构建可滚动表单，并把每个选项变量登记到对应 config 段。
+
+        entries: [(选项名, 值, 所属 config 段), ...]
+        """
         frame = ttk.Frame(parent)
         canvas = tk.Canvas(frame, highlightthickness=0)
         scrollbar = ttk.Scrollbar(
@@ -584,8 +959,7 @@ class App(object):
             lambda e, c=canvas: c.yview_scroll(
                 int(-e.delta / 120), 'units'))
 
-        section_vars = {}
-        for row, (option, value) in enumerate(options.items()):
+        for row, (option, value, section) in enumerate(entries):
             ttk.Label(inner, text=option).grid(
                 row=row, column=0, sticky='w', padx=6, pady=3)
             option_type = _option_type(option) or 'text'
@@ -595,15 +969,23 @@ class App(object):
                     inner, textvariable=var, values=YES_NO,
                     width=8, state='readonly')
                 box.grid(row=row, column=1, sticky='w', padx=6, pady=3)
+            elif option_type and '|' in option_type:
+                choices = option_type.split('|')
+                var = tk.StringVar(
+                    value=value if value in choices else choices[0])
+                box = ttk.Combobox(
+                    inner, textvariable=var, values=choices,
+                    width=10, state='readonly')
+                box.grid(row=row, column=1, sticky='w', padx=6, pady=3)
             else:
                 var = tk.StringVar(value=value)
                 entry = ttk.Entry(inner, textvariable=var, width=72)
                 entry.grid(row=row, column=1, sticky='w', padx=6, pady=3)
-            section_vars[option] = var
+            self.section_vars.setdefault(section, {})[option] = var
 
         canvas.pack(side='left', fill='both', expand=True)
         scrollbar.pack(side='right', fill='y')
-        return frame, section_vars
+        return frame
 
     def _active_block_numbers(self, data):
         """返回当前 拼网列/行分割数 范围内且配置中真实存在的区块号列表。"""
@@ -653,9 +1035,11 @@ class App(object):
         self.block_holder = holder
         self.block_frames = {}
         for section in digit_sections:
-            frame, section_vars = self._build_section_form(
-                holder, data[section])
-            self.section_vars[section] = section_vars
+            entries = [
+                (key, value, section)
+                for key, value in data[section].items()
+                if not _in_keys(key, BLOCK_HIDDEN_FIELDS)]
+            frame = self._build_option_form(holder, entries)
             self.block_frames[section] = frame
 
         active = self._active_block_numbers(data)
@@ -710,6 +1094,30 @@ class App(object):
     def _reload_config(self):
         self._load_config()
 
+    def _on_pattern_source_changed(self):
+        """菜单切换“图案来源”：同步配置项并写回 config.ini。"""
+        value = self.pattern_source_var.get()
+        self.data.setdefault('EXTRA', {})['图案来源'] = value
+        var = (self.section_vars.get('EXTRA') or {}).get('图案来源')
+        if var is not None:
+            var.set(value)
+        path = self.config_path_var.get().strip()
+        if self.config_loaded and os.path.isfile(path):
+            data = self._collect_config()
+            data.setdefault('EXTRA', {})['图案来源'] = value
+            if validate_config(data):
+                self._log(
+                    '提示：配置中有未通过校验的内容，'
+                    '“图案来源”将在下次保存配置时写入文件。')
+            else:
+                try:
+                    write_ini(path, data)
+                    self.data = data
+                except Exception as exc:
+                    self._log('保存“图案来源”失败: %s' % exc)
+        self._log('图案来源已切换为: %s' % value)
+        self.status_var.set('图案来源: %s' % value)
+
     def _show_usage(self):
         """生成网页版使用说明并在默认浏览器中打开。"""
         readme_path = resource_path('README.md')
@@ -737,21 +1145,102 @@ class App(object):
     # ---------------------------------------------------------------- 运行
 
     def _on_run(self):
-        if self.running:
+        preflight = self._preflight()
+        if preflight is None:
             return
+        workdir, config_path = preflight
+        self._warn_form_mismatch()
+
+        self._log('=' * 50)
+        self._log('开始生成...')
+        self._log('工作目录: %s' % workdir)
+        self._log('配置文件: %s' % config_path)
+        if self.form_layout:
+            self._log('总图排图: 按成型参数表 %s' % self.form_layout_source)
+        self._set_running(True)
+        thread = threading.Thread(
+            target=self._run_worker,
+            args=(workdir, config_path, self.form_layout),
+            daemon=True)
+        thread.start()
+
+    def _on_preview(self):
+        preflight = self._preflight()
+        if preflight is None:
+            return
+        workdir, config_path = preflight
+        self._warn_form_mismatch()
+
+        self._log('=' * 50)
+        self._log('输出总图（预览）...')
+        self._log('工作目录: %s' % workdir)
+        self._log('配置文件: %s' % config_path)
+        if self.form_layout:
+            self._log('总图排图: 按成型参数表 %s' % self.form_layout_source)
+        else:
+            self._log('总图排图: 按配置文件默认顺序')
+        self._set_running(True)
+        thread = threading.Thread(
+            target=self._run_overview_worker,
+            args=(workdir, config_path, self.form_layout),
+            daemon=True)
+        thread.start()
+
+    def _on_edit_overview(self):
+        preflight = self._preflight()
+        if preflight is None:
+            return
+        workdir, config_path = preflight
+        self._log('=' * 50)
+        self._log('生成编辑用总图（原图 100% 复制，供 CAD 修改）...')
+        self._log('工作目录: %s' % workdir)
+        self._log('配置文件: %s' % config_path)
+        if self.form_layout:
+            self._log('排布: 按成型参数表 %s' % self.form_layout_source)
+        else:
+            self._log('排布: 按配置文件配对与文件顺序')
+        self._set_running(True)
+        thread = threading.Thread(
+            target=self._run_edit_overview_worker,
+            args=(workdir, config_path, self.form_layout),
+            daemon=True)
+        thread.start()
+
+    def _on_check_rules(self):
+        preflight = self._preflight()
+        if preflight is None:
+            return
+        workdir, config_path = preflight
+        self._log('=' * 50)
+        self._log('设计规则检查...')
+        self._log('工作目录: %s' % workdir)
+        self._log('配置文件: %s' % config_path)
+        self._set_running(True)
+        thread = threading.Thread(
+            target=self._run_rules_worker,
+            args=(workdir, config_path),
+            daemon=True)
+        thread.start()
+
+    def _preflight(self):
+        """公共运行前校验；通过返回 (workdir, config_path)，否则返回 None。"""
+        if self.running:
+            return None
         workdir = self.workdir_var.get().strip()
         config_path = self.config_path_var.get().strip()
         if not os.path.isdir(workdir):
             messagebox.showwarning('目录不存在', '请选择有效的工作目录。')
-            return
+            return None
+        if not self.config_loaded:
+            if not os.path.isfile(config_path) or not self._load_config(quiet=True):
+                messagebox.showwarning(
+                    '未载入配置文件', '请先载入配置文件后再运行。')
+                return None
         if not os.path.isfile(config_path):
             messagebox.showwarning('配置文件不存在', '请选择有效的 config.ini 文件。')
-            return
-        if not self.section_vars:
-            if not self._load_config(quiet=True):
-                return
+            return None
         if not self._save_config_silently():
-            return
+            return None
 
         # 运行前检查：数字文件夹数量应与 拼网列分割数 x 拼网行分割数 一致
         try:
@@ -769,16 +1258,8 @@ class App(object):
                 '工作目录中的数字文件夹数量为 %d，配置要求 %d 个。\n'
                 '请检查工作目录或 拼网列/行分割数 设置。'
                 % (len(digit_dirs), expected))
-            return
-
-        self._log('=' * 50)
-        self._log('开始生成...')
-        self._log('工作目录: %s' % workdir)
-        self._log('配置文件: %s' % config_path)
-        self._set_running(True)
-        thread = threading.Thread(
-            target=self._run_worker, args=(workdir, config_path), daemon=True)
-        thread.start()
+            return None
+        return workdir, config_path
 
     def _save_config_silently(self):
         data = self._collect_config()
@@ -798,17 +1279,69 @@ class App(object):
         self._refresh_block_dropdown(data)
         return True
 
-    def _run_worker(self, workdir, config_path):
+    def _run_worker(self, workdir, config_path, layout=None):
         old_stdout, old_stderr = sys.stdout, sys.stderr
         writer = QueueWriter(self.log_queue)
         sys.stdout = writer
         sys.stderr = writer
         before = self._file_snapshot(workdir)
         try:
-            result = drawfeilin.main(workdir, config_path)
+            result = drawfeilin.main(
+                workdir, config_path, overview_layout=layout)
             after = self._file_snapshot(workdir)
             outputs = sorted(self._detect_new_files(before, after))
             self.log_queue.put(('done', (result, outputs)))
+        except Exception:
+            self.log_queue.put(('error', traceback.format_exc()))
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+    def _run_overview_worker(self, workdir, config_path, layout):
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        writer = QueueWriter(self.log_queue)
+        sys.stdout = writer
+        sys.stderr = writer
+        try:
+            paths = drawfeilin.generate_overview(
+                workdir, config_path, layout) or []
+            relative = [
+                os.path.relpath(path, workdir) for path in paths]
+            self.log_queue.put(('preview_done', relative))
+        except Exception:
+            self.log_queue.put(('error', traceback.format_exc()))
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+    def _run_rules_worker(self, workdir, config_path):
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        writer = QueueWriter(self.log_queue)
+        sys.stdout = writer
+        sys.stderr = writer
+        try:
+            report = drawfeilin.check_design_rules(workdir, config_path)
+            if report:
+                self.log_queue.put(
+                    ('rules_done', os.path.relpath(report, workdir)))
+            else:
+                self.log_queue.put(('rules_done', None))
+        except Exception:
+            self.log_queue.put(('error', traceback.format_exc()))
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+    def _run_edit_overview_worker(self, workdir, config_path, layout=None):
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        writer = QueueWriter(self.log_queue)
+        sys.stdout = writer
+        sys.stderr = writer
+        try:
+            paths = drawfeilin.generate_edit_overview(
+                workdir, config_path, layout) or []
+            relative = [os.path.relpath(path, workdir) for path in paths]
+            self.log_queue.put(('edit_done', relative))
         except Exception:
             self.log_queue.put(('error', traceback.format_exc()))
         finally:
@@ -837,6 +1370,10 @@ class App(object):
         self.running = running
         state = 'disabled' if running else 'normal'
         self.run_button.configure(state=state)
+        self.preview_button.configure(state=state)
+        self.edit_button.configure(state=state)
+        self.import_table_button.configure(state=state)
+        self.rules_button.configure(state=state)
         self.open_dir_button.configure(state=state)
         if running:
             self.status_var.set('正在生成...')
@@ -867,6 +1404,55 @@ class App(object):
                     else:
                         self.status_var.set('完成（未检测到新文件）')
                         self._log('完成（未检测到新文件）')
+                elif kind == 'preview_done':
+                    outputs = payload
+                    self._set_running(False)
+                    if outputs:
+                        self._set_output_files(outputs)
+                        self.status_var.set(
+                            '总图已生成: %s' % outputs[0])
+                        self._log('总图已生成:')
+                        for name in outputs:
+                            self._log('  - ' + name)
+                        first = os.path.join(
+                            self.workdir_var.get().strip(), outputs[0])
+                        try:
+                            os.startfile(first)  # noqa: S606
+                        except OSError as exc:
+                            self._log('自动打开失败: %s' % exc)
+                    else:
+                        self.status_var.set(
+                            '未生成总图（输入检查未通过，见日志）')
+                        self._log('未生成总图（输入检查未通过，见日志）')
+                elif kind == 'rules_done':
+                    self._set_running(False)
+                    if payload:
+                        self._set_output_files([payload])
+                        self.status_var.set('设计规则检查完成: %s' % payload)
+                        self._log('设计规则检查报告: ' + payload)
+                    else:
+                        self.status_var.set(
+                            '设计规则检查未完成（见日志）')
+                elif kind == 'edit_done':
+                    outputs = payload
+                    self._set_running(False)
+                    if outputs:
+                        self._set_output_files(outputs)
+                        self.status_var.set(
+                            '编辑用总图已生成: %s' % outputs[0])
+                        self._log('编辑用总图已生成（可在 CAD 中按原图层名修改）:')
+                        for name in outputs:
+                            self._log('  - ' + name)
+                        first = os.path.join(
+                            self.workdir_var.get().strip(), outputs[0])
+                        try:
+                            os.startfile(first)  # noqa: S606
+                        except OSError as exc:
+                            self._log('自动打开失败: %s' % exc)
+                    else:
+                        self.status_var.set(
+                            '未生成编辑用总图（输入检查未通过，见日志）')
+                        self._log('未生成编辑用总图（输入检查未通过，见日志）')
                 elif kind == 'error':
                     self._set_running(False)
                     self.status_var.set('运行出错，见日志')
